@@ -24,7 +24,7 @@ if (!fs.existsSync(IMAGENES_DIR)) {
 }
 app.use('/Imagenes', express.static(IMAGENES_DIR));
 
-// Inicialización automática de tablas y usuario administrador por defecto
+// Inicialización automática de tablas (sin sobrescribir tus datos reales ni meter precios falsos)
 async function inicializarBaseDeDatos() {
   try {
     await pool.query(`
@@ -81,7 +81,7 @@ async function inicializarBaseDeDatos() {
       );
     `);
 
-    // Crear usuario admin por defecto
+    // Crear usuario admin por defecto si no existe
     const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
     if (adminCheck.rows.length === 0) {
       await pool.query(
@@ -91,44 +91,7 @@ async function inicializarBaseDeDatos() {
       console.log('👤 Usuario administrador creado por defecto (admin / admin123).');
     }
 
-    // Insertar materiales por defecto si la tabla está vacía
-    const matCheck = await pool.query('SELECT COUNT(*) FROM materials');
-    if (parseInt(matCheck.rows[0].count) === 0) {
-      await pool.query(`
-        INSERT INTO materials (name, is_linear) VALUES 
-        ('Vinilo Blanco', false),
-        ('Lona Blackout', false),
-        ('Lona Front', false),
-        ('Fly Banner', true),
-        ('Portabanner', true);
-      `);
-      console.log('📦 Materiales predeterminados insertados.');
-    }
-
-    // Insertar tipos de impresión por defecto si la tabla está vacía
-    const ptCheck = await pool.query('SELECT COUNT(*) FROM print_types');
-    if (parseInt(ptCheck.rows[0].count) === 0) {
-      await pool.query(`
-        INSERT INTO print_types (name) VALUES 
-        ('HD Eco-solvente'),
-        ('UV LED'),
-        ('UVLED GIGA');
-      `);
-      console.log('🎨 Tipos de impresión predeterminados insertados.');
-    }
-
-    // Insertar reglas de precios base si la tabla está vacía
-    const prCheck = await pool.query('SELECT COUNT(*) FROM pricing_rules');
-    if (parseInt(prCheck.rows[0].count) === 0) {
-      await pool.query(`
-        INSERT INTO pricing_rules (material_id, print_type_id, price_per_m2) 
-        SELECT m.id, pt.id, 11000.00
-        FROM materials m, print_types pt;
-      `);
-      console.log('💰 Reglas de precios predeterminadas configuradas.');
-    }
-
-    console.log('✅ Base de datos inicializada y poblada correctamente.');
+    console.log('✅ Base de datos verificada y conectada correctamente con catálogos SQL.');
   } catch (err) {
     console.error('❌ Error inicializando la base de datos:', err);
   }
@@ -479,7 +442,7 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
         material_id = defaultMat.rows[0]?.id || 1;
         print_type_id = defaultPt.rows[0]?.id || 1;
         is_linear_db = defaultMat.rows[0]?.is_linear || false;
-        price_per_unit = 11000;
+        price_per_unit = 0; // Sin fallback falso de 11000
       }
     }
 
