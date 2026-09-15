@@ -201,7 +201,11 @@ async function descargarAdjuntosGmail(gmail, messageId, emailBody, emailHtmlBody
         const filePath = path.join(ADJUNTOS_DIR, safeFilename);
 
         fs.writeFileSync(filePath, fileData);
-        const publicUrl = `http://localhost:${process.env.PORT || 3000}/adjuntos/${encodeURIComponent(safeFilename)}`;
+        
+        // CORRECCIÓN AQUÍ: Usamos RENDER_EXTERNAL_URL en la nube o localhost en local
+        const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`;
+        const publicUrl = `${baseUrl}/adjuntos/${encodeURIComponent(safeFilename)}`;
+        
         archivosGuardados.push({ name: cleanedFilename, url: publicUrl });
       } else {
         const cleanedFilename = archivo.filename.replace(/[<>]/g, '').trim();
