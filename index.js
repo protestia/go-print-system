@@ -479,6 +479,7 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
 async function escanearCorreosGmail() {
   try {
     const gmail = getGmailClient();
+    console.log("🔍 Consultando Gmail en busca de correos no leídos...");
     const res = await gmail.users.messages.list({ userId: 'me', q: 'is:unread' });
 
     const messages = res.data.messages || [];
@@ -498,9 +499,11 @@ async function escanearCorreosGmail() {
 
       const checkEmail = await pool.query('SELECT id FROM work_orders WHERE email_id = $1', [msg.id]);
       if (checkEmail.rows.length > 0) {
+        console.log(`⏩ El correo ID ${msg.id} ya fue procesado anteriormente.`);
         continue;
       }
 
+      console.log(`📥 Descargando contenido del mensaje ID: ${msg.id}...`);
       const email = await gmail.users.messages.get({ 
         userId: 'me', 
         id: msg.id,
@@ -510,8 +513,45 @@ async function escanearCorreosGmail() {
       
       const fromHeader = headers.find(h => h.name === 'From')?.value || 'cliente@gmail.com';
       const subjectHeader = headers.find(h => h.name === 'Subject')?.value || '';
+      console.log(`✉️ Asunto detectado: "${subjectHeader}" de: ${fromHeader}`);
+
       let bodyText = email.data.snippet || '';
       let bodyHtml = '';
+
+      function extraerTextoYHtml(parts) {
+        if (!parts) return;
+        for (const p of parts) {
+          if (p.mimeType === 'text/plain' && p.body && p.body.data) {
+            bodyText = Buffer.from(p.body.data, 'base64').toString('utf-8');
+          }
+          if (p.mimeType === 'text/html' && p.body && p.body.data) {
+            bodyHtml = Buffer.from(p.body.data, 'base64').toString('utf-8');
+          }
+          if (p.parts) extraerTextoYHtml(p.parts);
+        }
+      }
+      if (email.data.payload.parts) {
+        extraerTextoYHtml(email.data.payload.parts);
+      } else if (email.data.payload.body && email.data.payload.body.data) {
+        bodyHtml = Buffer.from(email.data.payload.body.data, 'base64').toString('utf-8');
+      }
+
+      console.log(`⚙️ Procesando contenido y llamando a la IA...`);
+      
+      try {
+        const nuevaOT = await procesarTextoConIA(fromHeader, bodyText, msg.id, subjectHeader, gmail, bodyHtml);
+        
+        if (nuevaOT) {
+          console.log(`✅ Orden de Trabajo #${nuevaOT.id} creada automáticamente.`);
+        }
+      } catch (err) {
+        console.error(`❌ Error crítico al procesar el correo ${msg.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Error general al conectar con la API de Gmail:', err);
+  }
+}
 
       function extraerTextoYHtml(parts) {
         if (!parts) return;
