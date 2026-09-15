@@ -24,34 +24,79 @@ if (!fs.existsSync(IMAGENES_DIR)) {
 }
 app.use('/Imagenes', express.static(IMAGENES_DIR));
 
-pool.query(`
-  CREATE TABLE IF NOT EXISTS work_orders (
-    id SERIAL PRIMARY KEY,
-    client_name VARCHAR(255),
-    client_email VARCHAR(255),
-    width_cm NUMERIC(10,2) DEFAULT 0,
-    height_cm NUMERIC(10,2) DEFAULT 0,
-    copies INT DEFAULT 1,
-    total_price NUMERIC(10,2) DEFAULT 0,
-    original_files TEXT,
-    status VARCHAR(50) DEFAULT 'PENDING_DESIGN',
-    email_id VARCHAR(255) UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
+// Inicialización automática de tablas y usuario administrador por defecto
+async function inicializarBaseDeDatos() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'admin'
+      );
 
-  CREATE TABLE IF NOT EXISTS work_order_items (
-    id SERIAL PRIMARY KEY,
-    work_order_id INT REFERENCES work_orders(id) ON DELETE CASCADE,
-    file_name VARCHAR(255),
-    material_id INT,
-    print_type_id INT,
-    width_cm NUMERIC(10,2) DEFAULT 0,
-    height_cm NUMERIC(10,2) DEFAULT 0,
-    copies INT DEFAULT 1,
-    area_m2 NUMERIC(10,2) DEFAULT 0,
-    file_url TEXT
-  );
-`).catch(err => console.error("Error creando tablas iniciales:", err));
+      CREATE TABLE IF NOT EXISTS materials (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        is_linear BOOLEAN DEFAULT FALSE
+      );
+
+      CREATE TABLE IF NOT EXISTS print_types (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS pricing_rules (
+        id SERIAL PRIMARY KEY,
+        material_id INT REFERENCES materials(id) ON DELETE CASCADE,
+        print_type_id INT REFERENCES print_types(id) ON DELETE CASCADE,
+        price_per_m2 NUMERIC(10,2) DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS work_orders (
+        id SERIAL PRIMARY KEY,
+        client_name VARCHAR(255),
+        client_email VARCHAR(255),
+        width_cm NUMERIC(10,2) DEFAULT 0,
+        height_cm NUMERIC(10,2) DEFAULT 0,
+        copies INT DEFAULT 1,
+        total_price NUMERIC(10,2) DEFAULT 0,
+        original_files TEXT,
+        status VARCHAR(50) DEFAULT 'PENDING_DESIGN',
+        email_id VARCHAR(255) UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS work_order_items (
+        id SERIAL PRIMARY KEY,
+        work_order_id INT REFERENCES work_orders(id) ON DELETE CASCADE,
+        file_name VARCHAR(255),
+        material_id INT REFERENCES materials(id),
+        print_type_id INT REFERENCES print_types(id),
+        width_cm NUMERIC(10,2) DEFAULT 0,
+        height_cm NUMERIC(10,2) DEFAULT 0,
+        copies INT DEFAULT 1,
+        area_m2 NUMERIC(10,2) DEFAULT 0,
+        file_url TEXT
+      );
+    `);
+
+    const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
+    if (adminCheck.rows.length === 0) {
+      await pool.query(
+        'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+        ['admin', 'admin123', 'admin']
+      );
+      console.log('👤 Usuario administrador creado por defecto (admin / admin123).');
+    }
+
+    console.log('✅ Base de datos inicializada correctamente.');
+  } catch (err) {
+    console.error('❌ Error inicializando la base de datos:', err);
+  }
+}
+
+inicializarBaseDeDatos();
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -59,12 +104,10 @@ function getOAuthClient() {
   let credentials;
   let token;
 
-  // Si estamos en la nube (Render) y existen las variables de entorno, las leemos de ahí
   if (process.env.GOOGLE_CREDENTIALS && process.env.GOOGLE_TOKEN) {
     credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     token = JSON.parse(process.env.GOOGLE_TOKEN);
   } else {
-    // Si estamos en tu computadora local, lee los archivos físicos como antes
     credentials = JSON.parse(fs.readFileSync('credentials.json'));
     token = JSON.parse(fs.readFileSync('token.json'));
   }
@@ -75,35 +118,6 @@ function getOAuthClient() {
   oAuth2Client.setCredentials(token);
   return oAuth2Client;
 }
-
-// Inicializar la tabla de usuarios y crear un admin por defecto si no existe
-async function asegurarTablaUsuarios() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(100) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        role VARCHAR(50) DEFAULT 'admin'
-      );
-    `);
-
-    // Verificar si ya existe el usuario admin
-    const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
-    if (adminCheck.rows.length === 0) {
-      await pool.query(
-        'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
-        ['admin', 'admin123', 'admin']
-      );
-      console.log('👤 Usuario administrador creado por defecto (admin / admin123).');
-    }
-  } catch (err) {
-    console.error('❌ Error creando tabla de usuarios:', err);
-  }
-}
-
-// Ejecutar la función al iniciar
-asegurarTablaUsuarios();
 
 function getGmailClient() {
   const oAuth2Client = getOAuthClient();
@@ -553,49 +567,13 @@ async function escanearCorreosGmail() {
   }
 }
 
-      function extraerTextoYHtml(parts) {
-        if (!parts) return;
-        for (const p of parts) {
-          if (p.mimeType === 'text/plain' && p.body && p.body.data) {
-            bodyText = Buffer.from(p.body.data, 'base64').toString('utf-8');
-          }
-          if (p.mimeType === 'text/html' && p.body && p.body.data) {
-            bodyHtml = Buffer.from(p.body.data, 'base64').toString('utf-8');
-          }
-          if (p.parts) extraerTextoYHtml(p.parts);
-        }
-      }
-      if (email.data.payload.parts) {
-        extraerTextoYHtml(email.data.payload.parts);
-      } else if (email.data.payload.body && email.data.payload.body.data) {
-        bodyHtml = Buffer.from(email.data.payload.body.data, 'base64').toString('utf-8');
-      }
-
-      console.log(`⚙️ Procesando correo de: ${fromHeader}...`);
-      
-      try {
-        const nuevaOT = await procesarTextoConIA(fromHeader, bodyText, msg.id, subjectHeader, gmail, bodyHtml);
-        
-        if (nuevaOT) {
-          console.log(`✅ Orden de Trabajo #${nuevaOT.id} creada automáticamente.`);
-        }
-      } catch (err) {
-        console.error(`❌ Error al procesar el correo ${msg.id}:`, err.message);
-      }
-    }
-  } catch (err) {
-    console.error('Error al conectar con la API de Gmail:', err.message);
-  }
-}
-
-// Actualiza esta sección en tu endpoint /api/ordenes/:estado en index.js
 app.get('/api/ordenes/:estado', async (req, res) => {
   const { estado } = req.params;
   
   let statusFilter = 'PENDING_DESIGN';
   if (estado === 'impresion') statusFilter = 'READY_TO_PRINT';
   if (estado === 'entrega') statusFilter = 'READY_TO_DELIVER';
-  if (estado === 'historial') statusFilter = 'DELIVERED'; // 👈 NUEVO FILTRO PARA HISTORIAL
+  if (estado === 'historial') statusFilter = 'DELIVERED';
 
   try {
     const query = `
@@ -639,7 +617,6 @@ app.get('/api/ordenes/:estado', async (req, res) => {
   }
 });
 
-// Endpoint para actualizar nombre de archivo del ítem
 app.put('/api/ordenes/item-nombre/:id', async (req, res) => {
   const { id } = req.params;
   const { file_name } = req.body;
@@ -756,7 +733,6 @@ app.delete('/api/ordenes/item/:id', async (req, res) => {
   }
 });
 
-// Ruta para iniciar sesión
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -766,12 +742,10 @@ app.post('/api/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-    // Validación simple de contraseña (en entorno real usa bcrypt.compare)
     if (user.password !== password) {
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
     }
 
-    // Retornamos los datos del usuario y su rol
     res.json({ 
       success: true, 
       username: user.username, 
@@ -862,7 +836,6 @@ app.put('/api/ordenes/estado/:id', async (req, res) => {
   }
 });
 
-// Endpoint para obtener materiales y tipos de impresión disponibles (para los selectores)
 app.get('/api/catalogos', async (req, res) => {
   try {
     const materials = await pool.query('SELECT id, name FROM materials ORDER BY name;');
@@ -1037,7 +1010,6 @@ app.get('/ot/:id', async (req, res) => {
       </div>
 
       <div class="ot-container">
-        <!-- Encabezado Principal -->
         <table class="header-top">
           <tr>
             <td width="30%" class="text-center" style="padding: 4px;">
@@ -1051,7 +1023,6 @@ app.get('/ot/:id', async (req, res) => {
           </tr>
         </table>
 
-        <!-- Datos del Cliente y Fechas -->
         <table style="margin-top: 4px;">
           <tr>
             <td width="50%" style="font-weight: bold; font-size: 12px; background: #f0f0f0;">CLIENTE: ${ot.client_name.toUpperCase()}</td>
@@ -1060,7 +1031,6 @@ app.get('/ot/:id', async (req, res) => {
           </tr>
         </table>
 
-        <!-- Tabla de Detalle de Ítems -->
         <table class="main-table" style="margin-top: 4px;">
           <thead>
             <tr>
@@ -1084,7 +1054,6 @@ app.get('/ot/:id', async (req, res) => {
           </tbody>
         </table>
 
-        <!-- Sección de Conformidad y Pagos -->
         <table style="margin-top: 4px; border-collapse: collapse;">
           <tr>
             <td style="height: 55px; vertical-align: top; font-size: 10px; font-weight: bold; position: relative;">
