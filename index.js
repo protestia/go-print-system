@@ -764,18 +764,14 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/orders/manual', async (req, res) => {
     try {
-        const maxOrderQuery = await pool.query(`
-            SELECT MAX(ot_numero) as max_num FROM orders
-        `);
-        const nextNum = (maxOrderQuery.rows[0].max_num || 0) + 1;
-
         const { clientName, clientEmail, notes } = req.body;
 
+        // Guardamos directamente en work_orders para que aparezca en el panel de diseño
         const newOrderQuery = await pool.query(`
-            INSERT INTO orders (ot_numero, client_name, client_email, status, notes, total_price, created_at)
-            VALUES ($1, $2, $3, 'PENDING_DESIGN', $4, 0.00, NOW())
+            INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, created_at)
+            VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, NOW())
             RETURNING *
-        `, [nextNum, clientName || 'Cliente Mostrador / WhatsApp', clientEmail || '', notes || 'Orden creada manualmente']);
+        `, [clientName || 'Cliente Mostrador / WhatsApp', clientEmail || '']);
 
         res.json({ success: true, order: newOrderQuery.rows[0] });
     } catch (error) {
