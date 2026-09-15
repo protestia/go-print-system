@@ -76,6 +76,35 @@ function getOAuthClient() {
   return oAuth2Client;
 }
 
+// Inicializar la tabla de usuarios y crear un admin por defecto si no existe
+async function asegurarTablaUsuarios() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'admin'
+      );
+    `);
+
+    // Verificar si ya existe el usuario admin
+    const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
+    if (adminCheck.rows.length === 0) {
+      await pool.query(
+        'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+        ['admin', 'admin123', 'admin']
+      );
+      console.log('👤 Usuario administrador creado por defecto (admin / admin123).');
+    }
+  } catch (err) {
+    console.error('❌ Error creando tabla de usuarios:', err);
+  }
+}
+
+// Ejecutar la función al iniciar
+asegurarTablaUsuarios();
+
 function getGmailClient() {
   const oAuth2Client = getOAuthClient();
   return google.gmail({ version: 'v1', auth: oAuth2Client });
