@@ -42,8 +42,19 @@ pool.query(`
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 function getOAuthClient() {
-  const credentials = JSON.parse(fs.readFileSync('credentials.json'));
-  const token = JSON.parse(fs.readFileSync('token.json'));
+  let credentials;
+  let token;
+
+  // Si estamos en la nube (Render) y existen las variables de entorno, las leemos de ahí
+  if (process.env.GOOGLE_CREDENTIALS && process.env.GOOGLE_TOKEN) {
+    credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    token = JSON.parse(process.env.GOOGLE_TOKEN);
+  } else {
+    // Si estamos en tu computadora local, lee los archivos físicos como antes
+    credentials = JSON.parse(fs.readFileSync('credentials.json'));
+    token = JSON.parse(fs.readFileSync('token.json'));
+  }
+
   const { client_secret, client_id, redirect_uris } = credentials.installed || credentials.web;
   
   const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris ? redirect_uris[0] : 'urn:ietf:wg:oauth:2.0:oob');
