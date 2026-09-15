@@ -762,6 +762,33 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Ruta para crear una orden manual desde 0
+app.post('/api/orders/manual', async (req, res) => {
+    try {
+        // 1. Buscamos el número de orden más alto actual para calcular el siguiente
+        const maxOrderQuery = await pool.query(`
+            SELECT MAX(CAST(SUBSTRING(order_number FROM '[0-9]+') AS INTEGER)) as max_num 
+            FROM orders
+        `);
+        const nextNum = (maxOrderQuery.rows[0].max_num || 0) + 1;
+        const orderNumber = `OT #${nextNum}`;
+
+        const { clientName, clientEmail, notes } = req.body;
+
+        // 2. Insertamos la nueva orden en la base de datos
+        const newOrderQuery = await pool.query(`
+            INSERT INTO orders (order_number, client_name, client_email, status, notes, created_at)
+            VALUES ($1, $2, $3, 'PENDING_DESIGN', $4, NOW())
+            RETURNING *
+        `, [orderNumber, clientName || 'Cliente Mostrador / WhatsApp', clientEmail || '', notes || 'Orden creada manualmente']);
+
+        res.json({ success: true, order: newOrderQuery.rows[0] });
+    } catch (error) {
+        console.error("Error al crear orden manual:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 app.post('/api/ordenes/:id/item', async (req, res) => {
   const { id } = req.params;
   const { file_name, material_id, print_type_id, width_cm, height_cm, copies, file_url } = req.body;
