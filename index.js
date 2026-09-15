@@ -25,19 +25,33 @@ if (!fs.existsSync(IMAGENES_DIR)) {
 app.use('/Imagenes', express.static(IMAGENES_DIR));
 
 pool.query(`
+  CREATE TABLE IF NOT EXISTS work_orders (
+    id SERIAL PRIMARY KEY,
+    client_name VARCHAR(255),
+    client_email VARCHAR(255),
+    width_cm NUMERIC(10,2) DEFAULT 0,
+    height_cm NUMERIC(10,2) DEFAULT 0,
+    copies INT DEFAULT 1,
+    total_price NUMERIC(10,2) DEFAULT 0,
+    original_files TEXT,
+    status VARCHAR(50) DEFAULT 'PENDING_DESIGN',
+    email_id VARCHAR(255) UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS work_order_items (
     id SERIAL PRIMARY KEY,
     work_order_id INT REFERENCES work_orders(id) ON DELETE CASCADE,
     file_name VARCHAR(255),
-    material_id INT REFERENCES materials(id),
-    print_type_id INT REFERENCES print_types(id),
+    material_id INT,
+    print_type_id INT,
     width_cm NUMERIC(10,2) DEFAULT 0,
     height_cm NUMERIC(10,2) DEFAULT 0,
     copies INT DEFAULT 1,
     area_m2 NUMERIC(10,2) DEFAULT 0,
     file_url TEXT
   );
-`).catch(err => console.error("Error creando tabla work_order_items:", err));
+`).catch(err => console.error("Error creando tablas iniciales:", err));
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
