@@ -77,6 +77,10 @@
     .btn-delete-item:hover { background: #dc2626; }
     .btn-add-item { background: #10b981; color: white; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; width: 100%; margin-top: 6px; }
     .btn-add-item:hover { background: #059669; }
+
+    /* Estilo Botón Flotante de Orden Manual */
+    .btn-floating-add { position: fixed; bottom: 30px; right: 30px; background-color: #10b981; color: white; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 1000; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
+    .btn-floating-add:hover { background-color: #059669; transform: scale(1.05); }
   </style>
 </head>
 <body>
@@ -120,6 +124,38 @@
         <h1 id="seccion-titulo">Área de Diseño 🎨</h1>
       </div>
       <div class="grid" id="orders-container"></div>
+    </div>
+  </div>
+
+  <!-- Botón Flotante para Crear Orden Manualmente -->
+  <button onclick="abrirModalOrdenManual()" class="btn-floating-add" title="Crear Orden Manual">+</button>
+
+  <!-- Modal para Crear Orden Manual -->
+  <div id="modal-orden-manual" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+      <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Crear Nueva Orden Manual</h3>
+      
+      <form onsubmit="guardarOrdenManual(event)">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Nombre del Cliente:</label>
+          <input type="text" id="manual-client-name" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. Juan Pérez">
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Teléfono / Email (Opcional):</label>
+          <input type="text" id="manual-client-email" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. juan@mail.com">
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Notas / Observaciones:</label>
+          <textarea id="manual-notes" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; height: 80px;" placeholder="Detalles del pedido..."></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" onclick="cerrarModalOrdenManual()" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+          <button type="submit" style="padding: 8px 14px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Crear Orden</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -265,6 +301,7 @@
               
               const nombreMaterial = (item.material || '').toLowerCase();
               const esUnitario = nombreMaterial.includes('fly banner') || 
+                                 nombreMaterial.includes('roll up') || 
                                  nombreMaterial.includes('portabanner') || 
                                  nombreMaterial.includes('sublimado') ||
                                  nombreMaterial.includes('base cruz') ||
@@ -469,6 +506,44 @@
         cargarOrdenes();
       } else {
         alert("Error al agregar el nuevo ítem.");
+      }
+    }
+
+    /* Funciones para la Creación de Orden Manual con Correlativo */
+    function abrirModalOrdenManual() {
+      document.getElementById('manual-client-name').value = '';
+      document.getElementById('manual-client-email').value = '';
+      document.getElementById('manual-notes').value = '';
+      document.getElementById('modal-orden-manual').style.display = 'flex';
+    }
+
+    function cerrarModalOrdenManual() {
+      document.getElementById('modal-orden-manual').style.display = 'none';
+    }
+
+    async function guardarOrdenManual(event) {
+      event.preventDefault();
+      const clientName = document.getElementById('manual-client-name').value.trim();
+      const clientEmail = document.getElementById('manual-client-email').value.trim();
+      const notes = document.getElementById('manual-notes').value.trim();
+
+      try {
+        const res = await fetch('/api/orders/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientName, clientEmail, notes })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          cerrarModalOrdenManual();
+          cargarOrdenes(); // Recarga las tarjetas para mostrar la nueva orden con su número consecutivo
+        } else {
+          alert(data.error || 'Error al crear la orden manual.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión con el servidor.');
       }
     }
 
