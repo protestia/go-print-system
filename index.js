@@ -407,7 +407,19 @@ app.get('/api/ordenes/:estado', async (req, res) => {
   try {
     const query = `
       SELECT 
-        wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, wo.total_price,
+        wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, 
+        COALESCE(NULLIF(wo.total_price, 0), (
+          SELECT SUM(
+            CASE 
+              WHEN m.name ILIKE '%fly banner%' OR m.name ILIKE '%sublimado%' OR m.name ILIKE '%portabanner%' 
+              THEN woi.copies * COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
+              ELSE woi.area_m2 * COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
+            END
+          ) FROM work_order_items woi 
+          LEFT JOIN materials m ON woi.material_id = m.id
+          LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
+          WHERE woi.work_order_id = wo.id
+        ), 0) AS total_price,
         wo.status, wo.original_files, wo.created_at, wo.email_id,
         wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega,
         COALESCE(
