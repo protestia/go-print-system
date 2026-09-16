@@ -622,15 +622,40 @@ app.get('/api/ordenes/:estado', async (req, res) => {
   }
 });
 
-app.put('/api/ordenes/item-nombre/:id', async (req, res) => {
+Debes reemplazar la primera imagen (app.put('/api/ordenes/numero/:id', ...)) por esta versión con transacción para que actualice tanto la orden principal como sus ítems sin errores de restricción:
+
+JavaScript
+app.put('/api/ordenes/numero/:id', async (req, res) => {
   const { id } = req.params;
-  const { file_name } = req.body;
+  const { nuevo_numero } = req.body;
+  
+  const client = await pool.connect();
   try {
-    await pool.query(`UPDATE work_order_items SET file_name = $1 WHERE id = $2;`, [file_name, id]);
-    res.json({ message: 'Nombre de archivo actualizado.' });
+    await client.query('BEGIN');
+
+    await client.query(
+      `UPDATE work_order_items SET work_order_id = $1 WHERE work_order_id = $2;`, 
+      [nuevo_numero, id]
+    );
+
+    const result = await client.query(
+      `UPDATE work_orders SET id = $1 WHERE id = $2 RETURNING *;`, 
+      [nuevo_numero, id]
+    );
+
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'Número de OT y sus ítems actualizados con éxito', ot: result.rows[0] });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al actualizar el nombre del archivo' });
+    await client.query('ROLLBACK');
+    console.error("Error al actualizar número de OT:", err);
+    res.status(500).json({ error: 'Error al actualizar el número. Es posible que ese número de OT ya esté en uso.' });
+  } finally {
+    client.release();
   }
 });
 
