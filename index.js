@@ -209,7 +209,6 @@ async function descargarAdjuntosGmail(gmail, messageId, emailBody, emailHtmlBody
 
         fs.writeFileSync(filePath, fileData);
         
-        // CORRECCIÓN AQUÍ: Usamos RENDER_EXTERNAL_URL en la nube o localhost en local
         const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`;
         const publicUrl = `${baseUrl}/adjuntos/${encodeURIComponent(safeFilename)}`;
         
@@ -288,7 +287,7 @@ async function extraerDatosOrdenConIA(emailSubject, emailBody, attachmentNames, 
     7. Asocia cada ítem con su nombre de archivo correspondiente de la lista proporcionada.
     8. REGLA PARA FLY BANNERS / PORTABANNERS: Si el material es un "Fly Banner" o "Portabanner", el tipo de impresión por defecto DEBE ser "UV LED" y las medidas (width_cm y height_cm) deben ser 0 ya que se venden por unidad.
     9. REGLA PARA CALCOS Y PRE-CORTES: Si el mensaje menciona "pre corte", "calcos con corte" o "troquel", mapea a troquelado de medio corte estándar.
-    10. REGLA PARA BANNERS / LONAS CON BOLSILLOS: Si el texto indica que el banner o lona incluye "bolsillos", DEBES generar DOS ítems separados en el array con exactamente las mismas medidas y copias (la lona correspondiente y la "Terminación Bolsillos").
+    10. REGLA PARA BANNERS / LONAS CON BOLSILLOS / TERMINACIONES: Si el texto indica que el banner o lona incluye "bolsillos", "laqueado uv", "laminado", etc., DEBES generar ítems separados en el array con las medidas correspondientes.
     11. REGLA PARA ARCHIVOS DUPLICADOS EN DIFERENTES FORMATOS: Si el cliente adjunta el mismo diseño en varios formatos (ej. un .cdr y un .jpg con nombres similares), NO son trabajos distintos. AGRÚPALO EN UN SOLO OBJETO priorizando el archivo vectorial (.cdr).
   `;
 
@@ -417,6 +416,7 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
     let print_type_id = null;
     let is_linear_db = false;
 
+    // Búsqueda estricta por Material y Tipo de Impresión
     const queryPrecioEstricto = `
       SELECT pr.price_per_m2, m.id AS material_id, m.is_linear, pt.id AS print_type_id
       FROM pricing_rules pr
@@ -433,6 +433,7 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
       print_type_id = priceResult.rows[0].print_type_id;
       is_linear_db = priceResult.rows[0].is_linear;
     } else {
+      // 🛠️ Búsqueda de Respaldo por Material (ignora tipo de impresión para adicionales/terminaciones)
       const fallbackResult = await pool.query(`
         SELECT pr.price_per_m2, m.id AS material_id, m.is_linear, pt.id AS print_type_id
         FROM pricing_rules pr
@@ -447,13 +448,13 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
         print_type_id = fallbackResult.rows[0].print_type_id;
         is_linear_db = fallbackResult.rows[0].is_linear;
       } else {
-        console.warn(`⚠️ No se encontró regla de precio exacta para material: "${materialBuscado}" con tipo: "${tipoImpresionBuscado}".`);
-        const defaultMat = await pool.query(`SELECT id, is_linear FROM materials LIMIT 1;`);
+        console.warn(`⚠️ No se encontró regla de precio para material: "${materialBuscado}".`);
+        const defaultMat = await pool.query(`SELECT id, is_linear FROM materials WHERE LOWER(name) = LOWER($1) LIMIT 1;`, [materialBuscado]);
         const defaultPt = await pool.query(`SELECT id FROM print_types LIMIT 1;`);
         material_id = defaultMat.rows[0]?.id || 1;
-        print_type_id = defaultPt.rows[0]?.id || 1;
         is_linear_db = defaultMat.rows[0]?.is_linear || false;
-        price_per_unit = 0; // Sin fallback falso de 11000
+        print_type_id = defaultPt.rows[0]?.id || 1;
+        price_per_unit = 0;
       }
     }
 
@@ -638,8 +639,6 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Como tenemos ON UPDATE CASCADE, solo actualizamos la orden principal. 
-    // PostgreSQL actualizará los ítems automáticamente de forma segura.
     const result = await client.query(
       `UPDATE work_orders SET id = $1 WHERE id = $2 RETURNING *;`, 
       [nuevo_numero, id]
@@ -696,8 +695,11 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
       WHERE id = $5;
     `, [esUnitario ? 0 : width_cm, esUnitario ? 0 : height_cm, copies, area_m2.toFixed(2), id]);
 
+    // Recálculo utilizando COALESCE para asegurar que se obtenga precio incluso si no hay regla estricta por tipo de impresión
     const allItems = await pool.query(`
-      SELECT woi.*, pr.price_per_m2, m.name AS material_name 
+      SELECT woi.*, 
+             COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS price_per_m2, 
+             m.name AS material_name 
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
@@ -713,7 +715,7 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
       if (esItemUnitario) {
         grandTotal += it.copies * pM2;
       } else {
-        grandTotal += parseFloat(it.area_m2) * pM2;
+        grandTotal += parseFloat(it.area_m2 || 0) * pM2;
       }
     });
 
@@ -747,10 +749,7 @@ app.put('/api/ordenes/item/printed/:id', async (req, res) => {
 app.delete('/api/ordenes/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    // 1. Borramos los ítems asociados a la orden
     await pool.query(`DELETE FROM work_order_items WHERE work_order_id = $1;`, [id]);
-    
-    // 2. Borramos la orden de trabajo principal
     const result = await pool.query(`DELETE FROM work_orders WHERE id = $1 RETURNING *;`, [id]);
     
     if (result.rows.length === 0) {
@@ -774,7 +773,9 @@ app.delete('/api/ordenes/item/:id', async (req, res) => {
     await pool.query(`DELETE FROM work_order_items WHERE id = $1;`, [id]);
 
     const allItems = await pool.query(`
-      SELECT woi.*, pr.price_per_m2, m.name AS material_name 
+      SELECT woi.*, 
+             COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS price_per_m2, 
+             m.name AS material_name 
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
@@ -831,7 +832,6 @@ app.post('/api/orders/manual', async (req, res) => {
     try {
         const { clientName, clientEmail, notes } = req.body;
 
-        // Guardamos directamente en work_orders para que aparezca en el panel de diseño
         const newOrderQuery = await pool.query(`
             INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, created_at)
             VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, NOW())
@@ -884,7 +884,9 @@ app.post('/api/ordenes/:id/item', async (req, res) => {
     `, [id, file_name || 'Item_Manual.jpg', material_id, print_type_id, width, height, cant, area_m2.toFixed(2), file_url || '#']);
 
     const allItems = await pool.query(`
-      SELECT woi.*, pr.price_per_m2, m.name AS material_name 
+      SELECT woi.*, 
+             COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS price_per_m2, 
+             m.name AS material_name 
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
@@ -959,7 +961,7 @@ app.get('/ot/:id', async (req, res) => {
         woi.*, 
         COALESCE(m.name, 'Material General') AS material_name, 
         COALESCE(pt.name, 'Estándar') AS print_type_name,
-        pr.price_per_m2
+        COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS price_per_m2
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN print_types pt ON woi.print_type_id = pt.id
