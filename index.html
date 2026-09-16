@@ -3,76 +3,111 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sistema Go Print - Gestión</title>
+  <title>Sistema Go Print - Acceso</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; background: #f1f5f9; }
     
+    /* Pantalla de Login */
     #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #5b3693; display: flex; justify-content: center; align-items: center; z-index: 2000; }
     .login-card { background: white; padding: 40px; border-radius: 16px; width: 380px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; }
-    .login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; }
-    .login-btn { width: 100%; padding: 12px; background: #5b3693; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .login-card h2 { color: #5b3693; margin-top: 0; margin-bottom: 20px; font-size: 1.5rem; }
+    .login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+    .login-btn { width: 100%; padding: 12px; background: #5b3693; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+    .login-btn:hover { background: #341a5c; }
     .login-error { color: #ef4444; font-size: 0.85rem; margin-top: 10px; display: none; }
 
+    /* Sistema Principal */
     #app-container { display: none; width: 100%; height: 100vh; }
     .sidebar { width: 260px; background: #5b3693; color: white; padding: 20px; display: flex; flex-direction: column; gap: 20px; border-right: 1px solid #1e293b; }
-    .brand-container { display: flex; flex-direction: column; align-items: center; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 10px; }
-    .brand-logo { width: 110px; height: auto; margin-bottom: 8px; }
+    
+    .brand-container { display: flex; flex-direction: column; align-items: center; text-align: center; padding-bottom: 10px; border-bottom: 1px solid #334155; }
+    .brand-logo { width: 110px; height: auto; margin-bottom: 8px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
 
+    .sidebar h2 { margin: 0; font-size: 1.1rem; color: #a78bfa; padding-top: 5px; }
     .menu { display: flex; flex-direction: column; gap: 10px; flex: 1; }
     .menu-item { padding: 12px 15px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
     .menu-item:hover, .menu-item.active { background: #341a5c; color: white; }
     
     .user-info { font-size: 0.85rem; color: #cbd5e1; border-top: 1px solid #334155; padding-top: 15px; display: flex; flex-direction: column; gap: 8px; }
     .btn-logout { background: #ef4444; color: white; border: none; padding: 6px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
+    .btn-logout:hover { background: #dc2626; }
 
     .content { flex: 1; padding: 30px; overflow-y: auto; background: #f1f5f9; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .header h1 { margin: 0; font-size: 1.8rem; color: #5b3693; }
 
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
-    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 6px solid #7c3aed; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; }
     
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 6px solid #7c3aed; transition: 0.3s; }
+    .card.warning { border-left: 6px solid #f97316; background: #fff8f6; }
+    .card.delivered { border-left: 6px solid #10b981; background: #f8fafc; }
+
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-    .card-title { font-size: 1.1rem; font-weight: bold; color: #5b3693; margin: 0; }
+    .card-title { font-size: 1.1rem; font-weight: bold; color: #5b3693; margin: 0; display: flex; align-items: center; gap: 8px; }
     
     .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; background: #fef3c7; color: #92400e; }
+    .badge-warning { background: #ffedd5; color: #c2410c; border: 1px solid #f97316; }
     .badge-success { background: #d1fae5; color: #065f46; }
 
     .data-group { margin-bottom: 8px; font-size: 0.9rem; color: #334155; }
     .data-group span { font-weight: bold; color: #60008d; }
+    .email-tag { color: #64748b; font-size: 0.85rem; font-weight: normal; }
 
-    .file-actions { display: flex; flex-direction: column; gap: 8px; margin: 15px 0; background: #f8fafc; padding: 12px; border-radius: 8px; }
+    .file-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 15px 0; background: #f8fafc; padding: 12px; border-radius: 8px; }
+    .attachments-container { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 4px; }
+    
     .item-row { display: flex; justify-content: space-between; align-items: center; background: white; padding: 6px 10px; border-radius: 6px; border: 1px solid #e2e8f0; width: 100%; gap: 6px; }
+    .item-row.warning-item { border-color: #f97316; background: #fff1f2; }
 
-    .btn { padding: 8px 12px; border-radius: 6px; border: none; font-weight: bold; font-size: 0.85rem; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; margin-bottom: 8px; }
+    .btn { padding: 8px 12px; border-radius: 6px; border: none; font-weight: bold; font-size: 0.85rem; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
     .btn-download { color: #334155; text-decoration: none; font-size: 0.85rem; font-weight: 500; word-break: break-all; flex: 1; }
-    .btn-ot { background: #5b3693; color: white; }
-    .btn-status { background: #0ada56; color: white; }
+    .btn-download:hover { color: #5b3693; }
+    .btn-ot { background: #5b3693; color: white; margin-bottom: 8px; width: 100%; }
+    .btn-ot:hover { background: #341a5c; }
+    .btn-gmail { background: #5b3693; color: white; margin-bottom: 10px; width: 100%; }
+    .btn-gmail:hover { background: #341a5c; }
+    .btn-status { background: #0ada56; color: white; width: 100%; }
+    .btn-status:hover { background: #0bd15b; }
     .btn-status:disabled { background: #cbd5e1; cursor: not-allowed; }
+    .btn-edit { border: none; background: none; cursor: pointer; font-size: 0.9rem; }
+    .btn-edit-size { background: #f97316; color: white; border: none; padding: 3px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
+    .btn-edit-size:hover { background: #ea580c; }
+    .btn-delete-item { background: #ef4444; color: white; border: none; padding: 3px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
+    .btn-delete-item:hover { background: #dc2626; }
+    .btn-add-item { background: #10b981; color: white; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; width: 100%; margin-top: 6px; }
+    .btn-add-item:hover { background: #059669; }
+    
+    .btn-delete-order { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; width: 100%; margin-top: 6px; }
+    .btn-delete-order:hover { background: #dc2626; color: white; }
 
-    .input-custom { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; box-sizing: border-box; margin-top: 4px; }
-    .input-group { margin-bottom: 10px; }
-    .input-group label { font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; }
+    /* Estilo Botón Flotante de Orden Manual */
+    .btn-floating-add { position: fixed; bottom: 30px; right: 30px; background-color: #10b981; color: white; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 1000; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
+    .btn-floating-add:hover { background-color: #059669; transform: scale(1.05); }
   </style>
 </head>
 <body>
 
+  <!-- PANTALLA DE LOGIN -->
   <div id="login-screen">
     <div class="login-card">
       <h2>Go Print - Acceso</h2>
       <form onsubmit="realizarLogin(event)">
-        <input type="text" id="login-user" class="login-input" placeholder="Usuario" required>
-        <input type="password" id="login-pass" class="login-input" placeholder="Contraseña" required>
+        <input type="text" id="login-user" class="login-input" placeholder="Usuario" required autocomplete="username">
+        <input type="password" id="login-pass" class="login-input" placeholder="Contraseña" required autocomplete="current-password">
         <button type="submit" class="login-btn">Ingresar al Sistema</button>
-        <div id="login-error" class="login-error">Credenciales incorrectas</div>
+        <div id="login-error" class="login-error">Usuario o contraseña incorrectos</div>
       </form>
     </div>
   </div>
 
+  <!-- APLICACIÓN PRINCIPAL -->
   <div id="app-container">
     <div class="sidebar">
-      <div class="brand-container"><img src="/Imagenes/logo.png" alt="Logo" class="brand-logo"></div>
+      <div class="brand-container">
+        <img src="/Imagenes/logo.png" alt="Go Print Logo" class="brand-logo">
+      </div>
+
       <h2>PANEL DE CONTROL</h2>
       <div class="menu">
         <div class="menu-item active" id="btn-diseno" onclick="cargarSeccion('diseno')">🎨 DISEÑO</div>
@@ -80,6 +115,7 @@
         <div class="menu-item" id="btn-entrega" onclick="cargarSeccion('entrega')">📦 ENTREGA</div>
         <div class="menu-item" id="btn-historial" onclick="cargarSeccion('historial')">📚 HISTORIAL</div>
       </div>
+
       <div class="user-info">
         <span>👤 <strong id="lbl-username">Admin</strong> (<span id="lbl-role">admin</span>)</span>
         <button onclick="cerrarSesion()" class="btn-logout">Cerrar Sesión</button>
@@ -87,32 +123,128 @@
     </div>
 
     <div class="content">
-      <div class="header"><h1 id="seccion-titulo">Área de Diseño 🎨</h1></div>
+      <div class="header">
+        <h1 id="seccion-titulo">Área de Diseño 🎨</h1>
+      </div>
       <div class="grid" id="orders-container"></div>
+    </div>
+  </div>
+
+  <!-- Botón Flotante para Crear Orden Manual (Solo visible para Admin/Diseño) -->
+  <button onclick="abrirModalOrdenManual()" id="btn-floating-manual" class="btn-floating-add" title="Crear Orden Manual" style="display: none;">+</button>
+
+  <!-- Modal para Crear Orden Manual -->
+  <div id="modal-orden-manual" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+      <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Crear Nueva Orden Manual</h3>
+      
+      <form onsubmit="guardarOrdenManual(event)">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Nombre del Cliente:</label>
+          <input type="text" id="manual-client-name" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. Juan Pérez">
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Teléfono / Email (Opcional):</label>
+          <input type="text" id="manual-client-email" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. juan@mail.com">
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Notas / Observaciones:</label>
+          <textarea id="manual-notes" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; height: 80px;" placeholder="Detalles del pedido..."></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" onclick="cerrarModalOrdenManual()" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+          <button type="submit" style="padding: 8px 14px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Crear Orden</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal para Agregar Ítem Manualmente -->
+  <div id="modal-agregar-item" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+      <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Agregar Nuevo Ítem</h3>
+      
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Material:</label>
+        <select id="modal-material" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;"></select>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Tipo de Impresión:</label>
+        <select id="modal-print-type" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;"></select>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Nombre del Archivo / Trabajo:</label>
+        <input type="text" id="modal-filename" value="Diseno_Extra.cdr" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+        <div style="flex: 1;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Ancho (cm):</label>
+          <input type="number" id="modal-width" value="100" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+        </div>
+        <div style="flex: 1;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Alto (cm):</label>
+          <input type="number" id="modal-height" value="50" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Copias / Cantidad:</label>
+        <input type="number" id="modal-copies" value="1" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button onclick="cerrarModalItem()" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+        <button onclick="guardarItemManual()" style="padding: 8px 14px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Guardar Ítem</button>
+      </div>
     </div>
   </div>
 
   <script>
     let seccionActual = 'diseno';
+    let currentOtIdParaAgregar = null;
     let usuarioActual = JSON.parse(localStorage.getItem('goprint_user') || 'null');
 
-    window.onload = function() { if (usuarioActual) mostrarApp(); };
+    // Verificar si ya hay sesión iniciada al cargar la página
+    window.onload = function() {
+      if (usuarioActual) {
+        mostrarApp();
+      }
+    };
 
     async function realizarLogin(e) {
       e.preventDefault();
       const username = document.getElementById('login-user').value.trim();
       const password = document.getElementById('login-pass').value.trim();
+      const errorDiv = document.getElementById('login-error');
+
       try {
-        const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
         const data = await res.json();
+
         if (res.ok && data.success) {
           usuarioActual = data;
           localStorage.setItem('goprint_user', JSON.stringify(data));
+          errorDiv.style.display = 'none';
           mostrarApp();
         } else {
-          document.getElementById('login-error').style.display = 'block';
+          errorDiv.innerText = data.error || 'Credenciales incorrectas';
+          errorDiv.style.display = 'block';
         }
-      } catch (err) { console.error(err); }
+      } catch (err) {
+        console.error(err);
+        errorDiv.innerText = 'Error de conexión con el servidor';
+        errorDiv.style.display = 'block';
+      }
     }
 
     function mostrarApp() {
@@ -120,11 +252,40 @@
       document.getElementById('app-container').style.display = 'flex';
       document.getElementById('lbl-username').innerText = usuarioActual.username;
       document.getElementById('lbl-role').innerText = usuarioActual.role;
-      
+
       const role = (usuarioActual.role || '').toLowerCase();
-      if (role === 'impresion') cargarSeccion('impresion');
-      else if (role === 'entrega') cargarSeccion('entrega');
-      else cargarSeccion('diseno');
+      const btnDiseno = document.getElementById('btn-diseno');
+      const btnImpresion = document.getElementById('btn-impresion');
+      const btnEntrega = document.getElementById('btn-entrega');
+      const btnHistorial = document.getElementById('btn-historial');
+      const btnFloatingManual = document.getElementById('btn-floating-manual');
+
+      // Configurar visibilidad según el rol
+      if (role === 'admin' || role === 'diseno') {
+        btnDiseno.style.display = 'block';
+        btnImpresion.style.display = 'block';
+        btnEntrega.style.display = 'block';
+        btnHistorial.style.display = 'block';
+        if(btnFloatingManual) btnFloatingManual.style.display = 'flex';
+        cargarSeccion('diseno');
+      } else if (role === 'impresion') {
+        btnDiseno.style.display = 'none';
+        btnImpresion.style.display = 'block';
+        btnEntrega.style.display = 'block';
+        btnHistorial.style.display = 'block';
+        if(btnFloatingManual) btnFloatingManual.style.display = 'none';
+        cargarSeccion('impresion');
+      } else if (role === 'entrega') {
+        btnDiseno.style.display = 'none';
+        btnImpresion.style.display = 'none';
+        btnEntrega.style.display = 'block';
+        btnHistorial.style.display = 'block';
+        if(btnFloatingManual) btnFloatingManual.style.display = 'none';
+        cargarSeccion('entrega');
+      } else {
+        // Por defecto si hay otro rol
+        cargarSeccion('diseno');
+      }
     }
 
     function cerrarSesion() {
@@ -135,13 +296,28 @@
     }
 
     function cargarSeccion(seccion) {
+      const role = (usuarioActual?.role || '').toLowerCase();
+
+      // Seguridad en cliente: evitar que roles restringidos carguen vistas prohibidas
+      if ((role === 'impresion' && seccion === 'diseno') || 
+          (role === 'entrega' && (seccion === 'diseno' || seccion === 'impresion'))) {
+        return;
+      }
+
       seccionActual = seccion;
+      
       document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
       const activeEl = document.getElementById(`btn-${seccion}`);
       if (activeEl) activeEl.classList.add('active');
 
-      const titulos = { diseno: 'Área de Diseño 🎨', impresion: 'Área de Impresión 🖨️', entrega: 'Área de Entrega 📦', historial: 'Historial 📚' };
-      document.getElementById('seccion-titulo').innerText = titulos[seccion];
+      const titulos = {
+        diseno: 'Área de Diseño 🎨',
+        impresion: 'Área de Impresión 🖨️',
+        entrega: 'Área de Entrega 📦',
+        historial: 'Historial de Órdenes Entregadas 📚'
+      };
+      document.getElementById('seccion-titulo').innerText = titulos[seccion] || '';
+
       cargarOrdenes();
     }
 
@@ -158,113 +334,377 @@
         }
 
         ordenes.forEach(ot => {
-          let listadoItemsHTML = '';
+          let tieneMedidaFaltante = false;
           let todosImpresos = true;
-          let todosEntregados = true;
+          let listadoItemsHTML = '';
+          let resumenMateriales = [];
           let totalM2 = 0;
 
           if (ot.items && ot.items.length > 0) {
-            listadoItemsHTML = ot.items.map(item => {
+            listadoItemsHTML = ot.items.map((item) => {
               const ancho = parseFloat(item.width_cm || 0);
               const alto = parseFloat(item.height_cm || 0);
-              const esUnitario = (item.material || '').toLowerCase().includes('fly banner');
+              
+              const nombreMaterial = (item.material || '').toLowerCase();
+              const esUnitario = nombreMaterial.includes('fly banner') || 
+                                 nombreMaterial.includes('roll up') || 
+                                 nombreMaterial.includes('portabanner') || 
+                                 nombreMaterial.includes('sublimado') ||
+                                 nombreMaterial.includes('base cruz') ||
+                                 nombreMaterial.includes('contrapeso');
 
-              if (seccionActual === 'impresion' && !item.is_printed) todosImpresos = false;
-              if (seccionActual === 'entrega' && !item.is_delivered_item) todosEntregados = false;
+              if (!esUnitario && (ancho === 0 || alto === 0)) {
+                tieneMedidaFaltante = true;
+              }
 
-              totalM2 += esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
+              if (seccionActual === 'impresion' && !item.is_printed) {
+                todosImpresos = false;
+              }
 
-              if (seccionActual === 'impresion') {
+              const areaItem = esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
+              totalM2 += areaItem;
+              if (item.material) {
+                resumenMateriales.push(`${item.material} (${item.impresion || 'Std'})`);
+              }
+              
+              const urlFile = item.file_url || '#';
+              const esWarning = !esUnitario && (ancho === 0 || alto === 0);
+
+              if (seccionActual === 'diseno') {
                 return `
-                  <div class="item-row">
-                    <a href="${item.file_url || '#'}" target="_blank" class="btn-download">📥 ${item.file_name}</a>
-                    <label style="font-size: 0.8rem; font-weight: bold; cursor: pointer;">
-                      <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'printed', this.checked)"> ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
-                    </label>
-                  </div>`;
-              } else if (seccionActual === 'entrega') {
+                  <div class="item-row ${esWarning ? 'warning-item' : ''}">
+                    <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}">
+                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                    </a>
+                    <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre de archivo">✏️</button>
+                    <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
+                      📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
+                    </button>
+                    <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
+                  </div>
+                `;
+              } else if (seccionActual === 'impresion') {
                 return `
-                  <div class="item-row">
-                    <a href="${item.file_url || '#'}" target="_blank" class="btn-download">📥 ${item.file_name}</a>
-                    <label style="font-size: 0.8rem; font-weight: bold; cursor: pointer;">
-                      <input type="checkbox" ${item.is_delivered_item ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'delivered', this.checked)"> ${item.is_delivered_item ? 'LISTO ✔️' : 'Pendiente'}
+                  <div class="item-row" style="display: flex; align-items: center; justify-content: space-between;">
+                    <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}" style="font-weight: bold; color: #5b3693;">
+                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                    </a>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
+                      <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleImpresionItem(${item.id}, this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                      ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
                     </label>
-                  </div>`;
+                  </div>
+                `;
               } else {
-                return `<div class="item-row"><span class="btn-download">📥 ${item.file_name}</span></div>`;
+                return `
+                  <div class="item-row">
+                    <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}" style="font-weight: bold; color: #5b3693;">
+                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                    </a>
+                  </div>
+                `;
               }
             }).join('');
           }
 
+          const materialesUnicos = [...new Set(resumenMateriales)].join(', ');
+
           let botonSiguiente = '';
-          let seccionEntregaExtra = '';
+          let seccionBotonesExtras = '';
 
           if (seccionActual === 'diseno') {
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_PRINT')" class="btn btn-status">Pasar a Impresión ➔</button>`;
+            const disabledAttr = tieneMedidaFaltante ? 'disabled title="Debe cargar las medidas antes de avanzar"' : '';
+            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_PRINT')" class="btn btn-status" ${disabledAttr}>Pasar a Impresión ➔</button>`;
+            seccionBotonesExtras = `
+              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
+              <a href="${ot.client_email ? `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(ot.client_email)}` : 'https://mail.google.com'}" target="_blank" class="btn btn-gmail">✉️ Responder Gmail Cliente</a>
+            `;
           } else if (seccionActual === 'impresion') {
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" ${!todosImpresos ? 'disabled style="background:#cbd5e1;cursor:not-allowed;"' : ''}>Pasar a Entrega ➔</button>`;
+            const disabledEntrega = !todosImpresos ? 'disabled title="Debe tildar/verificar todos los archivos antes de pasar a entrega"' : '';
+            const bgEntrega = todosImpresos ? '#0ada56' : '#cbd5e1';
+            const cursorEntrega = todosImpresos ? 'pointer' : 'not-allowed';
+            
+            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega}; cursor: ${cursorEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
+            seccionBotonesExtras = `
+              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
+            `;
           } else if (seccionActual === 'entrega') {
-            seccionEntregaExtra = `
-              <div class="input-group">
-                <label>Entrega (Fecha Prometida):</label>
-                <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)" placeholder="Ej. Viernes 15hs">
-              </div>`;
-            
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" ${!todosEntregados ? 'disabled style="background:#cbd5e1;cursor:not-allowed;"' : ''}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
-            
-            seccionEntregaExtra += `
-              <div class="input-group" style="margin-top: 8px;">
-                <label>Entregado por:</label>
-                <input type="text" class="input-custom" value="${ot.entregado_por || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)" placeholder="Nombre del empleado">
-              </div>
-              <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
-                <label>Fecha de Entrega:</label>
-                <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)" placeholder="Ej. 26/09/2026">
-              </div>`;
+            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status">Finalizar Entrega ✔️</button>`;
+            seccionBotonesExtras = `
+              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
+            `;
+          } else if (seccionActual === 'historial') {
+            botonSiguiente = '';
+            seccionBotonesExtras = `
+              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
+            `;
           }
 
+          const badgeHTML = seccionActual === 'historial'
+            ? `<span class="badge badge-success">ENTREGADO ✔️</span>`
+            : (tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`);
+
+          const botonAgregarItemHTML = seccionActual === 'diseno' 
+            ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` 
+            : '';
+
+          const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
+
           container.innerHTML += `
-            <div class="card">
+            <div class="card ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
               <div class="card-header">
-                <h3 class="card-title">OT #${ot.ot_numero}</h3>
-                <span class="badge">${ot.status}</span>
+                <h3 class="card-title">
+                  OT #${ot.ot_numero}
+                  <button onclick="editarNumeroOT(${ot.ot_numero})" class="btn-edit" title="Editar número de orden">✏️</button>
+                </h3>
+                ${badgeHTML}
               </div>
-              <div class="data-group"><span>Cliente:</span> <strong>${ot.client_name}</strong></div>
-              <div class="data-group"><span>Resumen:</span> ${totalM2.toFixed(2)} m² total</div>
-              <div class="data-group"><span>Total:</span> $${ot.total_price} ARS</div>
               
-              ${seccionEntregaExtra}
+              <div class="data-group">
+                <span>Cliente:</span> <strong>${ot.client_name || 'Sin Especificar'}</strong>
+                ${seccionActual === 'diseno' ? `<button onclick="editarCliente(${ot.ot_numero}, '${ot.client_name || ''}')" class="btn-edit" title="Editar cliente">✏️</button>` : ''}
+                <br><span class="email-tag">(${ot.client_email})</span>
+              </div>
+              <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
+              <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
+              <div class="data-group"><span>Total:</span> $${ot.total_price} ARS</div>
 
               <div class="file-actions">
-                <span style="font-size: 0.85rem; font-weight: bold;">Archivos / Ítems:</span>
-                ${listadoItemsHTML}
+                <span style="font-size: 0.85rem; font-weight: bold;">Adjuntos / Ítems (${ot.items ? ot.items.length : 0}):</span>
+                <div class="attachments-container">
+                  ${listadoItemsHTML}
+                </div>
+                ${botonAgregarItemHTML}
               </div>
 
-              <button onclick="window.open('/ot/${ot.ot_numero}', '_blank')" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
+              ${seccionBotonesExtras}
               ${botonSiguiente}
-            </div>`;
+              ${botonEliminarOrden}
+            </div>
+          `;
         });
-      } catch (err) { console.error(err); }
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes desde el servidor.</p>';
+      }
     }
 
-    async function toggleItemStatus(itemId, tipo, isChecked) {
-      const endpoint = tipo === 'printed' ? `/api/ordenes/item/printed/${itemId}` : `/api/ordenes/item/delivered/${itemId}`;
-      const payload = tipo === 'printed' ? { is_printed: isChecked } : { is_delivered_item: isChecked };
-      
-      await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      cargarOrdenes();
+    async function toggleImpresionItem(itemId, isChecked) {
+      try {
+        const res = await fetch(`/api/ordenes/item/printed/${itemId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_printed: isChecked })
+        });
+        if (res.ok) {
+          cargarOrdenes();
+        } else {
+          alert('Error al actualizar el estado de impresión del ítem.');
+          cargarOrdenes();
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión con el servidor.');
+        cargarOrdenes();
+      }
     }
 
-    async function guardarInfoEntrega(otId, campo, valor) {
-      const body = {};
-      body[campo] = valor;
-      await fetch(`/api/ordenes/entrega-info/${otId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    async function editarNumeroOT(idActual) {
+      const nuevoNum = prompt("Ingresa el nuevo número de orden deseado:", idActual);
+      if (!nuevoNum || isNaN(nuevoNum) || nuevoNum.trim() === "") return;
+
+      try {
+        const res = await fetch(`/api/ordenes/numero/${idActual}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nuevo_numero: parseInt(nuevoNum) })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          cargarOrdenes();
+        } else {
+          alert(data.error || "Error al actualizar el número.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error de conexión al actualizar el número.");
+      }
+    }
+
+    async function eliminarOrden(otId) {
+      if (!confirm(`⚠️ ¿Estás completamente seguro de eliminar la OT #${otId} y todos sus ítems? Esta acción no se puede deshacer.`)) return;
+
+      try {
+        const res = await fetch(`/api/ordenes/${otId}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          cargarOrdenes();
+        } else {
+          alert(data.error || 'Error al eliminar la orden.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión con el servidor.');
+      }
+    }
+
+    async function editarNombreArchivo(itemId, nombreActual) {
+      const nuevoNombre = prompt("Ingrese el nuevo nombre para el archivo / ítem:", nombreActual);
+      if (!nuevoNombre || nuevoNombre.trim() === "" || nuevoNombre === nombreActual) return;
+
+      const res = await fetch(`/api/ordenes/item-nombre/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: nuevoNombre.trim() })
+      });
+
+      if (res.ok) cargarOrdenes();
+      else alert("Error al actualizar el nombre del archivo.");
+    }
+
+    async function editarMedidasItem(itemId, nombreArchivo, anchoActual, altoActual, cantActual) {
+      if (!itemId) return alert("ID de ítem no válido.");
+      const nuevoAncho = prompt(`Ingrese el ANCHO en cm para "${nombreArchivo}":`, anchoActual || 100);
+      if (nuevoAncho === null) return;
+      const nuevoAlto = prompt(`Ingrese el ALTO en cm para "${nombreArchivo}":`, altoActual || 100);
+      if (nuevoAlto === null) return;
+      const nuevasCopias = prompt(`Ingrese las COPIAS para "${nombreArchivo}":`, cantActual || 1);
+      if (nuevasCopias === null) return;
+
+      const res = await fetch(`/api/ordenes/item/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ width_cm: parseFloat(nuevoAncho), height_cm: parseFloat(nuevoAlto), copies: parseInt(nuevasCopias) })
+      });
+
+      if (res.ok) cargarOrdenes();
+      else alert("Error al actualizar las medidas.");
+    }
+
+    async function eliminarItem(itemId) {
+      if (!confirm("¿Estás seguro de eliminar este ítem de la orden?")) return;
+      const res = await fetch(`/api/ordenes/item/${itemId}`, { method: 'DELETE' });
+      if (res.ok) cargarOrdenes();
+      else alert("Error al eliminar el ítem.");
+    }
+
+    async function agregarItemManual(otId) {
+      currentOtIdParaAgregar = otId;
+      try {
+        const resCat = await fetch('/api/catalogos');
+        const catalogos = await resCat.json();
+        
+        const selectMat = document.getElementById('modal-material');
+        const selectPrint = document.getElementById('modal-print-type');
+
+        selectMat.innerHTML = '';
+        selectPrint.innerHTML = '';
+
+        catalogos.materials.forEach(m => selectMat.innerHTML += `<option value="${m.id}">${m.name}</option>`);
+        catalogos.printTypes.forEach(pt => selectPrint.innerHTML += `<option value="${pt.id}">${pt.name}</option>`);
+
+        document.getElementById('modal-agregar-item').style.display = 'flex';
+      } catch (e) {
+        console.error(e);
+        alert("Error al cargar los catálogos.");
+      }
+    }
+
+    function cerrarModalItem() {
+      document.getElementById('modal-agregar-item').style.display = 'none';
+      currentOtIdParaAgregar = null;
+    }
+
+    async function guardarItemManual() {
+      if (!currentOtIdParaAgregar) return;
+      const material_id = document.getElementById('modal-material').value;
+      const print_type_id = document.getElementById('modal-print-type').value;
+      const file_name = document.getElementById('modal-filename').value.trim();
+      const width_cm = document.getElementById('modal-width').value;
+      const height_cm = document.getElementById('modal-height').value;
+      const copies = document.getElementById('modal-copies').value;
+
+      if (!file_name) return alert("El nombre del archivo es obligatorio.");
+
+      const res = await fetch(`/api/ordenes/${currentOtIdParaAgregar}/item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name, material_id: parseInt(material_id), print_type_id: parseInt(print_type_id), width_cm: parseFloat(width_cm), height_cm: parseFloat(height_cm), copies: parseInt(copies), file_url: '#' })
+      });
+
+      if (res.ok) {
+        cerrarModalItem();
+        cargarOrdenes();
+      } else {
+        alert("Error al agregar el nuevo ítem.");
+      }
+    }
+
+    /* Funciones para la Creación de Orden Manual con Correlativo */
+    function abrirModalOrdenManual() {
+      document.getElementById('manual-client-name').value = '';
+      document.getElementById('manual-client-email').value = '';
+      document.getElementById('manual-notes').value = '';
+      document.getElementById('modal-orden-manual').style.display = 'flex';
+    }
+
+    function cerrarModalOrdenManual() {
+      document.getElementById('modal-orden-manual').style.display = 'none';
+    }
+
+    async function guardarOrdenManual(event) {
+      event.preventDefault();
+      const clientName = document.getElementById('manual-client-name').value.trim();
+      const clientEmail = document.getElementById('manual-client-email').value.trim();
+      const notes = document.getElementById('manual-notes').value.trim();
+
+      try {
+        const res = await fetch('/api/orders/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientName, clientEmail, notes })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          cerrarModalOrdenManual();
+          cargarOrdenes();
+        } else {
+          alert(data.error || 'Error al crear la orden manual.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión con el servidor.');
+      }
+    }
+
+    async function editarCliente(id, nombreActual) {
+      const nuevoNombre = prompt("Ingresa el nombre correcto del cliente:", nombreActual);
+      if (!nuevoNombre || nuevoNombre.trim() === "") return;
+      const res = await fetch(`/api/ordenes/cliente/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_name: nuevoNombre.trim() })
+      });
+      if (res.ok) cargarOrdenes();
+    }
+
+    function generarComprobanteOT(id) {
+      window.open(`/ot/${id}`, '_blank');
     }
 
     async function cambiarEstado(id, nuevoEstado) {
       if(!confirm(`¿Deseas avanzar el estado de la OT #${id}?`)) return;
-      await fetch(`/api/ordenes/estado/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: nuevoEstado }) });
-      cargarOrdenes();
+      const res = await fetch(`/api/ordenes/estado/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nuevoEstado })
+      });
+      if (res.ok) cargarOrdenes();
     }
   </script>
 </body>
