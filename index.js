@@ -609,7 +609,8 @@ app.get('/api/ordenes/:estado', async (req, res) => {
               'width_cm', woi.width_cm,
               'height_cm', woi.height_cm,
               'copies', woi.copies,
-              'file_url', woi.file_url
+              'file_url', woi.file_url,
+              'is_printed', woi.is_printed
             )
           ) FILTER (WHERE woi.id IS NOT NULL), '[]'
         ) AS items
@@ -722,6 +723,24 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al actualizar el ítem' });
+  }
+});
+
+app.put('/api/ordenes/item/printed/:id', async (req, res) => {
+  const { id } = req.params;
+  const { is_printed } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE work_order_items SET is_printed = $1 WHERE id = $2 RETURNING *;`,
+      [is_printed, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ítem no encontrado' });
+    }
+    res.json({ success: true, item: result.rows[0] });
+  } catch (err) {
+    console.error('Error al actualizar estado de impresión:', err);
+    res.status(500).json({ error: 'Error al actualizar el estado de impresión' });
   }
 });
 
