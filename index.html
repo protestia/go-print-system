@@ -68,7 +68,7 @@
     .btn-gmail { background: #5b3693; color: white; margin-bottom: 10px; width: 100%; }
     .btn-gmail:hover { background: #341a5c; }
     .btn-status { background: #0ada56; color: white; width: 100%; }
-    .btn-status:hover { background: #0ada56; }
+    .btn-status:hover { background: #0bd15b; }
     .btn-status:disabled { background: #cbd5e1; cursor: not-allowed; }
     .btn-edit { border: none; background: none; cursor: pointer; font-size: 0.9rem; }
     .btn-edit-size { background: #f97316; color: white; border: none; padding: 3px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
@@ -293,6 +293,7 @@
 
         ordenes.forEach(ot => {
           let tieneMedidaFaltante = false;
+          let todosImpresos = true;
           let listadoItemsHTML = '';
           let resumenMateriales = [];
           let totalM2 = 0;
@@ -312,6 +313,11 @@
 
               if (!esUnitario && (ancho === 0 || alto === 0)) {
                 tieneMedidaFaltante = true;
+              }
+
+              // Evaluar si falta marcar algún ítem en la sección de impresión
+              if (seccionActual === 'impresion' && !item.is_printed) {
+                todosImpresos = false;
               }
 
               const areaItem = esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
@@ -334,6 +340,18 @@
                       📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
                     </button>
                     <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
+                  </div>
+                `;
+              } else if (seccionActual === 'impresion') {
+                return `
+                  <div class="item-row" style="display: flex; align-items: center; justify-content: space-between;">
+                    <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}" style="font-weight: bold; color: #5b3693;">
+                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                    </a>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
+                      <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleImpresionItem(${item.id}, this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                      ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
+                    </label>
                   </div>
                 `;
               } else {
@@ -361,7 +379,11 @@
               <a href="${ot.client_email ? `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(ot.client_email)}` : 'https://mail.google.com'}" target="_blank" class="btn btn-gmail">✉️ Responder Gmail Cliente</a>
             `;
           } else if (seccionActual === 'impresion') {
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status">Pasar a Entrega ➔</button>`;
+            const disabledEntrega = !todosImpresos ? 'disabled title="Debe tildar/verificar todos los archivos antes de pasar a entrega"' : '';
+            const bgEntrega = todosImpresos ? '#0ada56' : '#cbd5e1';
+            const cursorEntrega = todosImpresos ? 'pointer' : 'not-allowed';
+            
+            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega}; cursor: ${cursorEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
             seccionBotonesExtras = `
               <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
             `;
@@ -423,6 +445,26 @@
       } catch (err) {
         console.error(err);
         container.innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes desde el servidor.</p>';
+      }
+    }
+
+    async function toggleImpresionItem(itemId, isChecked) {
+      try {
+        const res = await fetch(`/api/ordenes/item/printed/${itemId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_printed: isChecked })
+        });
+        if (res.ok) {
+          cargarOrdenes();
+        } else {
+          alert('Error al actualizar el estado de impresión del ítem.');
+          cargarOrdenes();
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión con el servidor.');
+        cargarOrdenes();
       }
     }
 
