@@ -480,7 +480,7 @@
               </div>
               <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
               <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
-              <div class="data-group"><span>Total:</span> $${ot.total_price} ARS</div>
+              <div class="data-group"><span>Total:</span> $${Number(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
 
               ${seccionEntregaExtra}
 
