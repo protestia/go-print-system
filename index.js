@@ -622,9 +622,6 @@ app.get('/api/ordenes/:estado', async (req, res) => {
   }
 });
 
-Debes reemplazar la primera imagen (app.put('/api/ordenes/numero/:id', ...)) por esta versión con transacción para que actualice tanto la orden principal como sus ítems sin errores de restricción:
-
-JavaScript
 app.put('/api/ordenes/numero/:id', async (req, res) => {
   const { id } = req.params;
   const { nuevo_numero } = req.body;
