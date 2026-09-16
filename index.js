@@ -77,8 +77,15 @@ async function inicializarBaseDeDatos() {
         height_cm NUMERIC(10,2) DEFAULT 0,
         copies INT DEFAULT 1,
         area_m2 NUMERIC(10,2) DEFAULT 0,
-        file_url TEXT
+        file_url TEXT,
+        is_printed BOOLEAN DEFAULT FALSE
       );
+    `);
+
+    // Añadir la columna de forma segura si la tabla ya existía previamente en la base de datos
+    await pool.query(`
+      ALTER TABLE work_order_items 
+      ADD COLUMN IF NOT EXISTS is_printed BOOLEAN DEFAULT FALSE;
     `);
 
     // Crear usuario admin por defecto si no existe
