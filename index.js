@@ -630,11 +630,8 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    await client.query(
-      `UPDATE work_order_items SET work_order_id = $1 WHERE work_order_id = $2;`, 
-      [nuevo_numero, id]
-    );
-
+    // Como tenemos ON UPDATE CASCADE, solo actualizamos la orden principal. 
+    // PostgreSQL actualizará los ítems automáticamente de forma segura.
     const result = await client.query(
       `UPDATE work_orders SET id = $1 WHERE id = $2 RETURNING *;`, 
       [nuevo_numero, id]
@@ -646,11 +643,11 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
     }
 
     await client.query('COMMIT');
-    res.json({ message: 'Número de OT actualizado con éxito', ot: result.rows[0] });
+    res.json({ message: 'Número de OT y sus ítems actualizados con éxito', ot: result.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error("❌ ERROR REAL DE PG:", err.message); // <-- Esto saldrá en los logs de Render
-    res.status(500).json({ error: `Error real: ${err.message}` }); // <-- Esto te dirá el motivo en la pantalla
+    console.error("❌ ERROR REAL DE PG:", err.message);
+    res.status(500).json({ error: `Error al actualizar el número: ${err.message}` });
   } finally {
     client.release();
   }
