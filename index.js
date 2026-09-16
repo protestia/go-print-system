@@ -644,17 +644,21 @@ app.put('/api/ordenes/cliente/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-// Comprobante PDF / HTML
+// Comprobante PDF / HTML Restaurado con el diseño original
 app.get('/ot/:id', async (req, res) => {
   const { id } = req.params;
+
   try {
     const otRes = await pool.query(`SELECT * FROM work_orders WHERE id = $1;`, [id]);
-    if (otRes.rows.length === 0) return res.status(404).send('No encontrada');
+    if (otRes.rows.length === 0) return res.status(404).send('Orden de trabajo no encontrada');
+
     const ot = otRes.rows[0];
-    
     const itemsRes = await pool.query(`
-      SELECT woi.*, COALESCE(m.name, 'General') AS material_name, COALESCE(pt.name, 'Std') AS print_type_name,
-      COALESCE(pr.price_per_m2, 0) AS price_per_m2
+      SELECT 
+        woi.*, 
+        COALESCE(m.name, 'Material General') AS material_name, 
+        COALESCE(pt.name, 'Estándar') AS print_type_name,
+        COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS price_per_m2
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN print_types pt ON woi.print_type_id = pt.id
@@ -662,32 +666,214 @@ app.get('/ot/:id', async (req, res) => {
       WHERE woi.work_order_id = $1;
     `, [id]);
 
-    let filasHTML = '';
-    let totalGeneral = 0;
-    itemsRes.rows.forEach(item => {
-      const subtotal = parseFloat(item.area_m2 || 0) * parseFloat(item.price_per_m2 || 0);
-      totalGeneral += subtotal;
-      filasHTML += `<tr><td>${item.file_name} (${item.material_name})</td><td class="text-center">${item.width_cm}x${item.height_cm}</td><td class="text-center">${item.copies}</td><td class="text-right">$${subtotal.toLocaleString('es-AR')}</td></tr>`;
+    const items = itemsRes.rows;
+
+    const grupos = {};
+    items.forEach(item => {
+      const key = `${item.material_name.toUpperCase()} ${item.print_type_name.toUpperCase()}`;
+      if (!grupos[key]) {
+        grupos[key] = {
+          nombre: key,
+          price_per_m2: parseFloat(item.price_per_m2 || 0),
+          archivos: [],
+          total_m2: 0,
+          esUnitarioFijo: false
+        };
+      }
+
+      const matLower = item.material_name.toLowerCase();
+      const esUnitario = matLower.includes('fly banner') || 
+                         matLower.includes('sublimado') || 
+                         matLower.includes('base cruz') || 
+                         matLower.includes('contrapeso') ||
+                         matLower.includes('portabanner');
+      
+      grupos[key].esUnitarioFijo = esUnitario;
+
+      let subM2 = 0;
+      let anchoVisual = 0;
+      let altoVisual = 0;
+
+      const wDb = parseFloat(item.width_cm || 0);
+      const hDb = parseFloat(item.height_cm || 0);
+
+      if (esUnitario) {
+        subM2 = item.copies;
+        anchoVisual = 1;
+        altoVisual = 1;
+      } else {
+        anchoVisual = wDb / 100;
+        altoVisual = hDb / 100;
+        subM2 = anchoVisual * altoVisual * item.copies;
+      }
+
+      grupos[key].archivos.push({
+        nombre: item.file_name.replace(/[<>]/g, '').trim(),
+        anchoM: esUnitario ? '-' : anchoVisual.toFixed(2),
+        altoM: esUnitario ? '-' : altoVisual.toFixed(2),
+        copies: item.copies,
+        m2: esUnitario ? item.copies : subM2.toFixed(2)
+      });
+      grupos[key].total_m2 += esUnitario ? 0 : subM2;
     });
 
-    res.send(`
-      <!DOCTYPE html>
-      <html lang="es">
-      <head><meta charset="UTF-8"><title>OT #${ot.id}</title></head>
-      <body style="font-family: Arial; padding: 20px;">
-        <h2>Orden de Trabajo Nº ${ot.id}</h2>
-        <p><strong>Cliente:</strong> ${ot.client_name}</p>
-        <table border="1" width="100%" style="border-collapse: collapse; margin-top: 15px;">
-          <tr style="background:#5b3693; color:white;"><th>Detalle</th><th>Medida</th><th>Cant</th><th>Total</th></tr>
-          ${filasHTML}
+    const otFormateada = `OT ${String(ot.id).padStart(2, '0')}`;
+    const fechaEmision = new Date(ot.created_at).toLocaleDateString('es-AR');
+
+    let filasHTML = '';
+    let totalGeneral = 0;
+
+    Object.values(grupos).forEach(grupo => {
+      let subtotalGrupoPrice = 0;
+      let totalUnidadesGrupo = 0;
+
+      if (grupo.esUnitarioFijo) {
+        grupo.archivos.forEach(f => totalUnidadesGrupo += f.copies);
+        subtotalGrupoPrice = totalUnidadesGrupo * grupo.price_per_m2;
+      } else {
+        subtotalGrupoPrice = grupo.total_m2 * grupo.price_per_m2;
+      }
+
+      totalGeneral += subtotalGrupoPrice;
+
+      filasHTML += `
+        <tr style="font-weight: bold; background-color: #f8fafc;">
+          <td colspan="4" style="text-align: left; font-size: 13px;">${grupo.nombre}</td>
+          <td class="text-right">${grupo.esUnitarioFijo ? totalUnidadesGrupo : grupo.total_m2.toFixed(2)}</td>
+          <td class="text-right">$${grupo.price_per_m2.toLocaleString('es-AR')}</td>
+          <td class="text-right">$${subtotalGrupoPrice.toLocaleString('es-AR')}</td>
+        </tr>
+      `;
+
+      grupo.archivos.forEach((file, index) => {
+        filasHTML += `
+          <tr>
+            <td style="padding-left: 20px; font-size: 11px;">Archivo ${index + 1}: &nbsp;&nbsp; ${file.nombre}</td>
+            <td class="text-center">${file.anchoM}</td>
+            <td class="text-center">${file.altoM}</td>
+            <td class="text-center">${file.copies}</td>
+            <td class="text-center">${file.m2}</td>
+            <td class="text-center">-</td>
+            <td class="text-center">-</td>
+          </tr>
+        `;
+      });
+    });
+
+    const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Orden de Trabajo ${otFormateada}</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 15px; color: #000; background-color: #fff; }
+        .ot-container { width: 850px; margin: auto; border: 2px solid #000; padding: 8px; box-sizing: border-box; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #000; padding: 4px 6px; font-size: 11px; vertical-align: middle; }
+        
+        .header-top td { border: 1px solid #000; padding: 6px; }
+        .title { font-size: 18px; font-weight: bold; text-align: center; letter-spacing: 1px; }
+        
+        .main-table th { background-color: #5b3693; color: white; font-weight: bold; text-align: center; font-size: 11px; padding: 6px; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .text-left { text-align: left; }
+        
+        .pago-table { width: 280px; border-collapse: collapse; float: right; margin-top: 5px; }
+        .pago-table td { border: 1px solid #000; text-align: center; font-size: 10px; padding: 4px; }
+        
+        @media print {
+          .no-print { display: none; }
+          body { margin: 0; }
+          .ot-container { border: none; width: 100%; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="margin-bottom: 15px; text-align: center;">
+        <button onclick="window.print()" style="padding: 10px 20px; font-weight: bold; cursor: pointer; background: #5b3693; color: #fff; border: none; border-radius: 4px;">🖨️ Imprimir / Guardar PDF</button>
+      </div>
+
+      <div class="ot-container">
+        <table class="header-top">
+          <tr>
+            <td width="30%" class="text-center" style="padding: 4px;">
+              <img src="/Imagenes/logo2.png" alt="Go Print" style="max-height: 60px; width: auto; display: block; margin: auto;">
+            </td>
+            <td width="48%" class="title">ORDEN DE TRABAJO</td>
+            <td width="22%" class="text-center" style="font-weight: bold; font-size: 10px;">
+              Nº de ORDEN <br>
+              <span style="font-size: 14px;">OT ${String(ot.id).padStart(4, '0')}</span>
+            </td>
+          </tr>
         </table>
-        <h3 style="text-align: right;">Total General: $${totalGeneral.toLocaleString('es-AR')}</h3>
-        <button onclick="window.print()" style="padding: 10px 20px; background:#5b3693; color:white; border:none; cursor:pointer;">🖨️ Imprimir</button>
-      </body>
-      </html>
-    `);
+
+        <table style="margin-top: 4px;">
+          <tr>
+            <td width="50%" style="font-weight: bold; font-size: 12px; background: #f0f0f0;">CLIENTE: ${ot.client_name.toUpperCase()}</td>
+            <td width="25%" class="text-center" style="font-size: 11px;">${fechaEmision}</td>
+            <td width="25%" class="text-center" style="font-size: 11px;">Fecha Entrega: ${fechaEmision}</td>
+          </tr>
+        </table>
+
+        <table class="main-table" style="margin-top: 4px;">
+          <thead>
+            <tr>
+              <th width="42%">DETALLE</th>
+              <th width="8%">ANCHO</th>
+              <th width="8%">LARGO</th>
+              <th width="7%">CANT.</th>
+              <th width="10%">TOTAL M2</th>
+              <th width="12%">PRECIO UNIT.</th>
+              <th width="13%">PRECIO TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasHTML}
+            ${Array(Math.max(0, 12 - items.length)).fill('<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td>-</td><td>-</td></tr>').join('')}
+            
+            <tr style="background-color: #f9f9f9;">
+              <td colspan="6" class="text-right" style="font-weight: bold; font-size: 12px;">TOTAL ARS:</td>
+              <td class="text-right" style="font-weight: bold; font-size: 13px;">$${totalGeneral.toLocaleString('es-AR')}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table style="margin-top: 4px; border-collapse: collapse;">
+          <tr>
+            <td style="height: 55px; vertical-align: top; font-size: 10px; font-weight: bold; position: relative;">
+              CONFORMIDAD
+              <div style="position: absolute; bottom: 5px; left: 6px; font-size: 10px; font-weight: bold;">
+                FIRMA Y ACLARACIÓN: _________________________________________
+              </div>
+            </td>
+            <td width="300" style="vertical-align: top; padding: 0; border: none;">
+              <table class="pago-table" style="margin: 0; width: 100%;">
+                <tr style="background-color: #e2e8f0; font-weight: bold;">
+                  <td colspan="3">PAGO</td>
+                </tr>
+                <tr>
+                  <td width="33%">EFECTIVO</td>
+                  <td width="33%">BANCO</td>
+                  <td width="33%">CHEQUE</td>
+                </tr>
+                <tr style="height: 25px;">
+                  <td></td><td></td><td></td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </body>
+    </html>
+    `;
+
+    res.send(html);
   } catch (err) {
-    res.status(500).send('Error');
+    console.error(err);
+    res.status(500).send('Error al generar comprobante');
   }
 });
 
