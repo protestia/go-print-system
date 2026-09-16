@@ -77,6 +77,9 @@
     .btn-delete-item:hover { background: #dc2626; }
     .btn-add-item { background: #10b981; color: white; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; width: 100%; margin-top: 6px; }
     .btn-add-item:hover { background: #059669; }
+    
+    .btn-delete-order { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; width: 100%; margin-top: 6px; }
+    .btn-delete-order:hover { background: #dc2626; color: white; }
 
     /* Estilo Botón Flotante de Orden Manual */
     .btn-floating-add { position: fixed; bottom: 30px; right: 30px; background-color: #10b981; color: white; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 1000; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
@@ -382,6 +385,8 @@
             ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` 
             : '';
 
+          const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
+
           container.innerHTML += `
             <div class="card ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
               <div class="card-header">
@@ -411,6 +416,7 @@
 
               ${seccionBotonesExtras}
               ${botonSiguiente}
+              ${botonEliminarOrden}
             </div>
           `;
         });
@@ -440,6 +446,26 @@
       } catch (err) {
         console.error(err);
         alert("Error de conexión al actualizar el número.");
+      }
+    }
+
+    async function eliminarOrden(otId) {
+      if (!confirm(`⚠️ ¿Estás completamente seguro de eliminar la OT #${otId} y todos sus ítems? Esta acción no se puede deshacer.`)) return;
+
+      try {
+        const res = await fetch(`/api/ordenes/${otId}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          cargarOrdenes();
+        } else {
+          alert(data.error || 'Error al eliminar la orden.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión con el servidor.');
       }
     }
 
@@ -563,7 +589,7 @@
 
         if (res.ok && data.success) {
           cerrarModalOrdenManual();
-          cargarOrdenes(); // Recarga las tarjetas para mostrar la nueva orden con su número consecutivo
+          cargarOrdenes();
         } else {
           alert(data.error || 'Error al crear la orden manual.');
         }
