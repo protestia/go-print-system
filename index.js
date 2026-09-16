@@ -634,6 +634,21 @@ app.put('/api/ordenes/item-nombre/:id', async (req, res) => {
   }
 });
 
+app.put('/api/ordenes/numero/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nuevo_numero } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE work_orders SET id = $1 WHERE id = $2 RETURNING *;`, 
+      [nuevo_numero, id]
+    );
+    res.json({ message: 'Número de OT actualizado', ot: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar el número de OT (quizás ya exista ese número)' });
+  }
+});
+
 app.put('/api/ordenes/item/:id', async (req, res) => {
   const { id } = req.params;
   const { width_cm, height_cm, copies } = req.body;
