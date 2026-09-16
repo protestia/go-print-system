@@ -422,7 +422,8 @@ app.get('/api/ordenes/:estado', async (req, res) => {
               'copies', woi.copies,
               'file_url', woi.file_url,
               'is_printed', woi.is_printed,
-              'is_delivered_item', woi.is_delivered_item
+              'is_delivered_item', woi.is_delivered_item,
+              'price_per_m2', COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
             )
           ) FILTER (WHERE woi.id IS NOT NULL), '[]'
         ) AS items
@@ -430,8 +431,9 @@ app.get('/api/ordenes/:estado', async (req, res) => {
       LEFT JOIN work_order_items woi ON wo.id = woi.work_order_id
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN print_types pt ON woi.print_type_id = pt.id
+      LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
       WHERE UPPER(COALESCE(wo.status, 'PENDING_DESIGN')) = UPPER($1)
-      GROUP BY wo.id
+      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega
       ORDER BY wo.created_at DESC;
     `;
     const result = await pool.query(query, [statusFilter]);
