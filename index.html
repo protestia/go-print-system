@@ -37,7 +37,7 @@
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .header h1 { margin: 0; font-size: 1.8rem; color: #5b3693; }
 
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
     
     .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 6px solid #7c3aed; transition: 0.3s; }
     .card.warning { border-left: 6px solid #f97316; background: #fff8f6; }
@@ -67,9 +67,10 @@
     .btn-ot:hover { background: #341a5c; }
     .btn-gmail { background: #5b3693; color: white; margin-bottom: 10px; width: 100%; }
     .btn-gmail:hover { background: #341a5c; }
-    .btn-status { background: #0ada56; color: white; width: 100%; }
+    .btn-status { background: #0ada56; color: white; width: 100%; margin-bottom: 8px; }
     .btn-status:hover { background: #0bd15b; }
     .btn-status:disabled { background: #cbd5e1; cursor: not-allowed; }
+    
     .btn-edit { border: none; background: none; cursor: pointer; font-size: 0.9rem; }
     .btn-edit-size { background: #f97316; color: white; border: none; padding: 3px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
     .btn-edit-size:hover { background: #ea580c; }
@@ -80,6 +81,11 @@
     
     .btn-delete-order { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; width: 100%; margin-top: 6px; }
     .btn-delete-order:hover { background: #dc2626; color: white; }
+
+    /* Estilos para inputs de Entrega */
+    .input-custom { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; box-sizing: border-box; margin-top: 4px; background: #fff; }
+    .input-group { margin-bottom: 12px; }
+    .input-group label { font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; }
 
     /* Estilo Botón Flotante de Orden Manual */
     .btn-floating-add { position: fixed; bottom: 30px; right: 30px; background-color: #10b981; color: white; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 1000; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
@@ -130,7 +136,7 @@
     </div>
   </div>
 
-  <!-- Botón Flotante para Crear Orden Manual (Solo visible para Admin/Diseño) -->
+  <!-- Botón Flotante para Crear Orden Manual -->
   <button onclick="abrirModalOrdenManual()" id="btn-floating-manual" class="btn-floating-add" title="Crear Orden Manual" style="display: none;">+</button>
 
   <!-- Modal para Crear Orden Manual -->
@@ -210,11 +216,8 @@
     let currentOtIdParaAgregar = null;
     let usuarioActual = JSON.parse(localStorage.getItem('goprint_user') || 'null');
 
-    // Verificar si ya hay sesión iniciada al cargar la página
     window.onload = function() {
-      if (usuarioActual) {
-        mostrarApp();
-      }
+      if (usuarioActual) mostrarApp();
     };
 
     async function realizarLogin(e) {
@@ -260,7 +263,6 @@
       const btnHistorial = document.getElementById('btn-historial');
       const btnFloatingManual = document.getElementById('btn-floating-manual');
 
-      // Configurar visibilidad según el rol
       if (role === 'admin' || role === 'diseno') {
         btnDiseno.style.display = 'block';
         btnImpresion.style.display = 'block';
@@ -283,7 +285,6 @@
         if(btnFloatingManual) btnFloatingManual.style.display = 'none';
         cargarSeccion('entrega');
       } else {
-        // Por defecto si hay otro rol
         cargarSeccion('diseno');
       }
     }
@@ -297,15 +298,12 @@
 
     function cargarSeccion(seccion) {
       const role = (usuarioActual?.role || '').toLowerCase();
-
-      // Seguridad en cliente: evitar que roles restringidos carguen vistas prohibidas
       if ((role === 'impresion' && seccion === 'diseno') || 
           (role === 'entrega' && (seccion === 'diseno' || seccion === 'impresion'))) {
         return;
       }
 
       seccionActual = seccion;
-      
       document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
       const activeEl = document.getElementById(`btn-${seccion}`);
       if (activeEl) activeEl.classList.add('active');
@@ -336,6 +334,7 @@
         ordenes.forEach(ot => {
           let tieneMedidaFaltante = false;
           let todosImpresos = true;
+          let todosEntregados = true;
           let listadoItemsHTML = '';
           let resumenMateriales = [];
           let totalM2 = 0;
@@ -344,7 +343,6 @@
             listadoItemsHTML = ot.items.map((item) => {
               const ancho = parseFloat(item.width_cm || 0);
               const alto = parseFloat(item.height_cm || 0);
-              
               const nombreMaterial = (item.material || '').toLowerCase();
               const esUnitario = nombreMaterial.includes('fly banner') || 
                                  nombreMaterial.includes('roll up') || 
@@ -353,19 +351,12 @@
                                  nombreMaterial.includes('base cruz') ||
                                  nombreMaterial.includes('contrapeso');
 
-              if (!esUnitario && (ancho === 0 || alto === 0)) {
-                tieneMedidaFaltante = true;
-              }
+              if (!esUnitario && (ancho === 0 || alto === 0)) tieneMedidaFaltante = true;
+              if (seccionActual === 'impresion' && !item.is_printed) todosImpresos = false;
+              if (seccionActual === 'entrega' && !item.is_delivered_item) todosEntregados = false;
 
-              if (seccionActual === 'impresion' && !item.is_printed) {
-                todosImpresos = false;
-              }
-
-              const areaItem = esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
-              totalM2 += areaItem;
-              if (item.material) {
-                resumenMateriales.push(`${item.material} (${item.impresion || 'Std'})`);
-              }
+              totalM2 += esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
+              if (item.material) resumenMateriales.push(`${item.material} (${item.impresion || 'Std'})`);
               
               const urlFile = item.file_url || '#';
               const esWarning = !esUnitario && (ancho === 0 || alto === 0);
@@ -376,33 +367,41 @@
                     <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}">
                       📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
                     </a>
-                    <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre de archivo">✏️</button>
+                    <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
                     <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
                       📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
                     </button>
                     <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
-                  </div>
-                `;
+                  </div>`;
               } else if (seccionActual === 'impresion') {
                 return `
-                  <div class="item-row" style="display: flex; align-items: center; justify-content: space-between;">
-                    <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}" style="font-weight: bold; color: #5b3693;">
+                  <div class="item-row">
+                    <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
                       📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
                     </a>
                     <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
-                      <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleImpresionItem(${item.id}, this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                      <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'printed', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
                       ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
                     </label>
-                  </div>
-                `;
+                  </div>`;
+              } else if (seccionActual === 'entrega') {
+                return `
+                  <div class="item-row">
+                    <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
+                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                    </a>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_delivered_item ? '#10b981' : '#64748b'};">
+                      <input type="checkbox" ${item.is_delivered_item ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'delivered', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                      ${item.is_delivered_item ? 'LISTO ✔️' : 'Pendiente'}
+                    </label>
+                  </div>`;
               } else {
                 return `
                   <div class="item-row">
-                    <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}" style="font-weight: bold; color: #5b3693;">
+                    <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
                       📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
                     </a>
-                  </div>
-                `;
+                  </div>`;
               }
             }).join('');
           }
@@ -411,6 +410,7 @@
 
           let botonSiguiente = '';
           let seccionBotonesExtras = '';
+          let seccionEntregaExtra = '';
 
           if (seccionActual === 'diseno') {
             const disabledAttr = tieneMedidaFaltante ? 'disabled title="Debe cargar las medidas antes de avanzar"' : '';
@@ -422,22 +422,36 @@
           } else if (seccionActual === 'impresion') {
             const disabledEntrega = !todosImpresos ? 'disabled title="Debe tildar/verificar todos los archivos antes de pasar a entrega"' : '';
             const bgEntrega = todosImpresos ? '#0ada56' : '#cbd5e1';
-            const cursorEntrega = todosImpresos ? 'pointer' : 'not-allowed';
             
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega}; cursor: ${cursorEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
-            seccionBotonesExtras = `
-              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
-            `;
+            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
+            seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
           } else if (seccionActual === 'entrega') {
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status">Finalizar Entrega ✔️</button>`;
-            seccionBotonesExtras = `
-              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
-            `;
+            // Sección superior: Entrega (Fecha Prometida)
+            seccionEntregaExtra += `
+              <div class="input-group">
+                <label>Entrega (Fecha Prometida):</label>
+                <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)" placeholder="Ej. Viernes 15hs">
+              </div>`;
+
+            const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
+            const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
+
+            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
+            
+            seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+
+            // Sección inferior: Entregado por y Fecha de Entrega
+            seccionEntregaExtra += `
+              <div class="input-group" style="margin-top: 10px;">
+                <label>Entregado por:</label>
+                <input type="text" class="input-custom" value="${ot.entregado_por || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)" placeholder="Nombre del empleado">
+              </div>
+              <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
+                <label>Fecha de Entrega:</label>
+                <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)" placeholder="Ej. 26/09/2026">
+              </div>`;
           } else if (seccionActual === 'historial') {
-            botonSiguiente = '';
-            seccionBotonesExtras = `
-              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
-            `;
+            seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
           }
 
           const badgeHTML = seccionActual === 'historial'
@@ -445,8 +459,7 @@
             : (tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`);
 
           const botonAgregarItemHTML = seccionActual === 'diseno' 
-            ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` 
-            : '';
+            ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` : '';
 
           const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
 
@@ -469,149 +482,104 @@
               <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
               <div class="data-group"><span>Total:</span> $${ot.total_price} ARS</div>
 
+              ${seccionEntregaExtra}
+
               <div class="file-actions">
                 <span style="font-size: 0.85rem; font-weight: bold;">Adjuntos / Ítems (${ot.items ? ot.items.length : 0}):</span>
-                <div class="attachments-container">
-                  ${listadoItemsHTML}
-                </div>
+                <div class="attachments-container">${listadoItemsHTML}</div>
                 ${botonAgregarItemHTML}
               </div>
 
               ${seccionBotonesExtras}
               ${botonSiguiente}
               ${botonEliminarOrden}
-            </div>
-          `;
+            </div>`;
         });
       } catch (err) {
         console.error(err);
-        container.innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes desde el servidor.</p>';
+        container.innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes.</p>';
       }
     }
 
-    async function toggleImpresionItem(itemId, isChecked) {
-      try {
-        const res = await fetch(`/api/ordenes/item/printed/${itemId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_printed: isChecked })
-        });
-        if (res.ok) {
-          cargarOrdenes();
-        } else {
-          alert('Error al actualizar el estado de impresión del ítem.');
-          cargarOrdenes();
-        }
-      } catch (err) {
-        console.error(err);
-        alert('Error de conexión con el servidor.');
-        cargarOrdenes();
-      }
+    async function toggleItemStatus(itemId, tipo, isChecked) {
+      const endpoint = tipo === 'printed' ? `/api/ordenes/item/printed/${itemId}` : `/api/ordenes/item/delivered/${itemId}`;
+      const payload = tipo === 'printed' ? { is_printed: isChecked } : { is_delivered_item: isChecked };
+      
+      await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      cargarOrdenes();
+    }
+
+    async function guardarInfoEntrega(otId, campo, valor) {
+      const body = {};
+      body[campo] = valor;
+      await fetch(`/api/ordenes/entrega-info/${otId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     }
 
     async function editarNumeroOT(idActual) {
       const nuevoNum = prompt("Ingresa el nuevo número de orden deseado:", idActual);
-      if (!nuevoNum || isNaN(nuevoNum) || nuevoNum.trim() === "") return;
-
-      try {
-        const res = await fetch(`/api/ordenes/numero/${idActual}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nuevo_numero: parseInt(nuevoNum) })
-        });
-        
-        const data = await res.json();
-        if (res.ok) {
-          cargarOrdenes();
-        } else {
-          alert(data.error || "Error al actualizar el número.");
-        }
-      } catch (err) {
-        console.error(err);
-        alert("Error de conexión al actualizar el número.");
-      }
+      if (!nuevoNum || isNaN(nuevoNum)) return;
+      const res = await fetch(`/api/ordenes/numero/${idActual}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nuevo_numero: parseInt(nuevoNum) })
+      });
+      if (res.ok) cargarOrdenes();
+      else alert("Error al actualizar el número.");
     }
 
     async function eliminarOrden(otId) {
-      if (!confirm(`⚠️ ¿Estás completamente seguro de eliminar la OT #${otId} y todos sus ítems? Esta acción no se puede deshacer.`)) return;
-
-      try {
-        const res = await fetch(`/api/ordenes/${otId}`, {
-          method: 'DELETE'
-        });
-        const data = await res.json();
-
-        if (res.ok && data.success) {
-          cargarOrdenes();
-        } else {
-          alert(data.error || 'Error al eliminar la orden.');
-        }
-      } catch (err) {
-        console.error(err);
-        alert('Error de conexión con el servidor.');
-      }
+      if (!confirm(`⚠️ ¿Seguro de eliminar la OT #${otId}?`)) return;
+      const res = await fetch(`/api/ordenes/${otId}`, { method: 'DELETE' });
+      if (res.ok) cargarOrdenes();
     }
 
     async function editarNombreArchivo(itemId, nombreActual) {
-      const nuevoNombre = prompt("Ingrese el nuevo nombre para el archivo / ítem:", nombreActual);
-      if (!nuevoNombre || nuevoNombre.trim() === "" || nuevoNombre === nombreActual) return;
-
-      const res = await fetch(`/api/ordenes/item-nombre/${itemId}`, {
+      const nuevoNombre = prompt("Nuevo nombre para el archivo:", nombreActual);
+      if (!nuevoNombre || nuevoNombre.trim() === "") return;
+      await fetch(`/api/ordenes/item-nombre/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_name: nuevoNombre.trim() })
       });
-
-      if (res.ok) cargarOrdenes();
-      else alert("Error al actualizar el nombre del archivo.");
+      cargarOrdenes();
     }
 
     async function editarMedidasItem(itemId, nombreArchivo, anchoActual, altoActual, cantActual) {
-      if (!itemId) return alert("ID de ítem no válido.");
-      const nuevoAncho = prompt(`Ingrese el ANCHO en cm para "${nombreArchivo}":`, anchoActual || 100);
+      const nuevoAncho = prompt(`Ancho en cm para "${nombreArchivo}":`, anchoActual || 100);
       if (nuevoAncho === null) return;
-      const nuevoAlto = prompt(`Ingrese el ALTO en cm para "${nombreArchivo}":`, altoActual || 100);
+      const nuevoAlto = prompt(`Alto en cm para "${nombreArchivo}":`, altoActual || 100);
       if (nuevoAlto === null) return;
-      const nuevasCopias = prompt(`Ingrese las COPIAS para "${nombreArchivo}":`, cantActual || 1);
+      const nuevasCopias = prompt(`Copias para "${nombreArchivo}":`, cantActual || 1);
       if (nuevasCopias === null) return;
 
-      const res = await fetch(`/api/ordenes/item/${itemId}`, {
+      await fetch(`/api/ordenes/item/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ width_cm: parseFloat(nuevoAncho), height_cm: parseFloat(nuevoAlto), copies: parseInt(nuevasCopias) })
       });
-
-      if (res.ok) cargarOrdenes();
-      else alert("Error al actualizar las medidas.");
+      cargarOrdenes();
     }
 
     async function eliminarItem(itemId) {
-      if (!confirm("¿Estás seguro de eliminar este ítem de la orden?")) return;
-      const res = await fetch(`/api/ordenes/item/${itemId}`, { method: 'DELETE' });
-      if (res.ok) cargarOrdenes();
-      else alert("Error al eliminar el ítem.");
+      if (!confirm("¿Eliminar este ítem?")) return;
+      await fetch(`/api/ordenes/item/${itemId}`, { method: 'DELETE' });
+      cargarOrdenes();
     }
 
     async function agregarItemManual(otId) {
       currentOtIdParaAgregar = otId;
-      try {
-        const resCat = await fetch('/api/catalogos');
-        const catalogos = await resCat.json();
-        
-        const selectMat = document.getElementById('modal-material');
-        const selectPrint = document.getElementById('modal-print-type');
+      const resCat = await fetch('/api/catalogos');
+      const catalogos = await resCat.json();
+      
+      const selectMat = document.getElementById('modal-material');
+      const selectPrint = document.getElementById('modal-print-type');
+      selectMat.innerHTML = '';
+      selectPrint.innerHTML = '';
 
-        selectMat.innerHTML = '';
-        selectPrint.innerHTML = '';
+      catalogos.materials.forEach(m => selectMat.innerHTML += `<option value="${m.id}">${m.name}</option>`);
+      catalogos.printTypes.forEach(pt => selectPrint.innerHTML += `<option value="${pt.id}">${pt.name}</option>`);
 
-        catalogos.materials.forEach(m => selectMat.innerHTML += `<option value="${m.id}">${m.name}</option>`);
-        catalogos.printTypes.forEach(pt => selectPrint.innerHTML += `<option value="${pt.id}">${pt.name}</option>`);
-
-        document.getElementById('modal-agregar-item').style.display = 'flex';
-      } catch (e) {
-        console.error(e);
-        alert("Error al cargar los catálogos.");
-      }
+      document.getElementById('modal-agregar-item').style.display = 'flex';
     }
 
     function cerrarModalItem() {
@@ -628,23 +596,15 @@
       const height_cm = document.getElementById('modal-height').value;
       const copies = document.getElementById('modal-copies').value;
 
-      if (!file_name) return alert("El nombre del archivo es obligatorio.");
-
-      const res = await fetch(`/api/ordenes/${currentOtIdParaAgregar}/item`, {
+      await fetch(`/api/ordenes/${currentOtIdParaAgregar}/item`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_name, material_id: parseInt(material_id), print_type_id: parseInt(print_type_id), width_cm: parseFloat(width_cm), height_cm: parseFloat(height_cm), copies: parseInt(copies), file_url: '#' })
       });
-
-      if (res.ok) {
-        cerrarModalItem();
-        cargarOrdenes();
-      } else {
-        alert("Error al agregar el nuevo ítem.");
-      }
+      cerrarModalItem();
+      cargarOrdenes();
     }
 
-    /* Funciones para la Creación de Orden Manual con Correlativo */
     function abrirModalOrdenManual() {
       document.getElementById('manual-client-name').value = '';
       document.getElementById('manual-client-email').value = '';
@@ -662,35 +622,24 @@
       const clientEmail = document.getElementById('manual-client-email').value.trim();
       const notes = document.getElementById('manual-notes').value.trim();
 
-      try {
-        const res = await fetch('/api/orders/manual', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clientName, clientEmail, notes })
-        });
-        const data = await res.json();
-
-        if (res.ok && data.success) {
-          cerrarModalOrdenManual();
-          cargarOrdenes();
-        } else {
-          alert(data.error || 'Error al crear la orden manual.');
-        }
-      } catch (err) {
-        console.error(err);
-        alert('Error de conexión con el servidor.');
-      }
+      await fetch('/api/orders/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientName, clientEmail, notes })
+      });
+      cerrarModalOrdenManual();
+      cargarOrdenes();
     }
 
     async function editarCliente(id, nombreActual) {
-      const nuevoNombre = prompt("Ingresa el nombre correcto del cliente:", nombreActual);
+      const nuevoNombre = prompt("Nombre correcto del cliente:", nombreActual);
       if (!nuevoNombre || nuevoNombre.trim() === "") return;
-      const res = await fetch(`/api/ordenes/cliente/${id}`, {
+      await fetch(`/api/ordenes/cliente/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client_name: nuevoNombre.trim() })
       });
-      if (res.ok) cargarOrdenes();
+      cargarOrdenes();
     }
 
     function generarComprobanteOT(id) {
@@ -699,12 +648,12 @@
 
     async function cambiarEstado(id, nuevoEstado) {
       if(!confirm(`¿Deseas avanzar el estado de la OT #${id}?`)) return;
-      const res = await fetch(`/api/ordenes/estado/${id}`, {
+      await fetch(`/api/ordenes/estado/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nuevoEstado })
       });
-      if (res.ok) cargarOrdenes();
+      cargarOrdenes();
     }
   </script>
 </body>
