@@ -130,8 +130,8 @@
     </div>
   </div>
 
-  <!-- Botón Flotante para Crear Orden Manualmente -->
-  <button onclick="abrirModalOrdenManual()" class="btn-floating-add" title="Crear Orden Manual">+</button>
+  <!-- Botón Flotante para Crear Orden Manual (Solo visible para Admin/Diseño) -->
+  <button onclick="abrirModalOrdenManual()" id="btn-floating-manual" class="btn-floating-add" title="Crear Orden Manual" style="display: none;">+</button>
 
   <!-- Modal para Crear Orden Manual -->
   <div id="modal-orden-manual" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
@@ -252,7 +252,40 @@
       document.getElementById('app-container').style.display = 'flex';
       document.getElementById('lbl-username').innerText = usuarioActual.username;
       document.getElementById('lbl-role').innerText = usuarioActual.role;
-      cargarSeccion('diseno');
+
+      const role = (usuarioActual.role || '').toLowerCase();
+      const btnDiseno = document.getElementById('btn-diseno');
+      const btnImpresion = document.getElementById('btn-impresion');
+      const btnEntrega = document.getElementById('btn-entrega');
+      const btnHistorial = document.getElementById('btn-historial');
+      const btnFloatingManual = document.getElementById('btn-floating-manual');
+
+      // Configurar visibilidad según el rol
+      if (role === 'admin' || role === 'diseno') {
+        btnDiseno.style.display = 'block';
+        btnImpresion.style.display = 'block';
+        btnEntrega.style.display = 'block';
+        btnHistorial.style.display = 'block';
+        if(btnFloatingManual) btnFloatingManual.style.display = 'flex';
+        cargarSeccion('diseno');
+      } else if (role === 'impresion') {
+        btnDiseno.style.display = 'none';
+        btnImpresion.style.display = 'block';
+        btnEntrega.style.display = 'block';
+        btnHistorial.style.display = 'block';
+        if(btnFloatingManual) btnFloatingManual.style.display = 'none';
+        cargarSeccion('impresion');
+      } else if (role === 'entrega') {
+        btnDiseno.style.display = 'none';
+        btnImpresion.style.display = 'none';
+        btnEntrega.style.display = 'block';
+        btnHistorial.style.display = 'block';
+        if(btnFloatingManual) btnFloatingManual.style.display = 'none';
+        cargarSeccion('entrega');
+      } else {
+        // Por defecto si hay otro rol
+        cargarSeccion('diseno');
+      }
     }
 
     function cerrarSesion() {
@@ -263,10 +296,19 @@
     }
 
     function cargarSeccion(seccion) {
+      const role = (usuarioActual?.role || '').toLowerCase();
+
+      // Seguridad en cliente: evitar que roles restringidos carguen vistas prohibidas
+      if ((role === 'impresion' && seccion === 'diseno') || 
+          (role === 'entrega' && (seccion === 'diseno' || seccion === 'impresion'))) {
+        return;
+      }
+
       seccionActual = seccion;
       
       document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
-      document.getElementById(`btn-${seccion}`).classList.add('active');
+      const activeEl = document.getElementById(`btn-${seccion}`);
+      if (activeEl) activeEl.classList.add('active');
 
       const titulos = {
         diseno: 'Área de Diseño 🎨',
@@ -274,7 +316,7 @@
         entrega: 'Área de Entrega 📦',
         historial: 'Historial de Órdenes Entregadas 📚'
       };
-      document.getElementById('seccion-titulo').innerText = titulos[seccion];
+      document.getElementById('seccion-titulo').innerText = titulos[seccion] || '';
 
       cargarOrdenes();
     }
@@ -315,7 +357,6 @@
                 tieneMedidaFaltante = true;
               }
 
-              // Evaluar si falta marcar algún ítem en la sección de impresión
               if (seccionActual === 'impresion' && !item.is_printed) {
                 todosImpresos = false;
               }
