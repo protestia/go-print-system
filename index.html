@@ -44,7 +44,7 @@
     .card.delivered { border-left: 6px solid #10b981; background: #f8fafc; }
 
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-    .card-title { font-size: 1.1rem; font-weight: bold; color: #5b3693; margin: 0; }
+    .card-title { font-size: 1.1rem; font-weight: bold; color: #5b3693; margin: 0; display: flex; align-items: center; gap: 8px; }
     
     .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; background: #fef3c7; color: #92400e; }
     .badge-warning { background: #ffedd5; color: #c2410c; border: 1px solid #f97316; }
@@ -385,7 +385,10 @@
           container.innerHTML += `
             <div class="card ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
               <div class="card-header">
-                <h3 class="card-title">OT #${ot.ot_numero}</h3>
+                <h3 class="card-title">
+                  OT #${ot.ot_numero}
+                  <button onclick="editarNumeroOT(${ot.ot_numero})" class="btn-edit" title="Editar número de orden">✏️</button>
+                </h3>
                 ${badgeHTML}
               </div>
               
@@ -414,6 +417,29 @@
       } catch (err) {
         console.error(err);
         container.innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes desde el servidor.</p>';
+      }
+    }
+
+    async function editarNumeroOT(idActual) {
+      const nuevoNum = prompt("Ingresa el nuevo número de orden deseado:", idActual);
+      if (!nuevoNum || isNaN(nuevoNum) || nuevoNum.trim() === "") return;
+
+      try {
+        const res = await fetch(`/api/ordenes/numero/${idActual}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nuevo_numero: parseInt(nuevoNum) })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          cargarOrdenes();
+        } else {
+          alert(data.error || "Error al actualizar el número.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error de conexión al actualizar el número.");
       }
     }
 
