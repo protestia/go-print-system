@@ -646,11 +646,11 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
     }
 
     await client.query('COMMIT');
-    res.json({ message: 'Número de OT y sus ítems actualizados con éxito', ot: result.rows[0] });
+    res.json({ message: 'Número de OT actualizado con éxito', ot: result.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error("Error al actualizar número de OT:", err);
-    res.status(500).json({ error: 'Error al actualizar el número. Es posible que ese número de OT ya esté en uso.' });
+    console.error("❌ ERROR REAL DE PG:", err.message); // <-- Esto saldrá en los logs de Render
+    res.status(500).json({ error: `Error real: ${err.message}` }); // <-- Esto te dirá el motivo en la pantalla
   } finally {
     client.release();
   }
