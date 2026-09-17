@@ -402,7 +402,7 @@
             if (seccionActual === 'diseno') {
               return `
                 <div class="item-row ${esWarning ? 'warning-item' : ''}">
-                  <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}">
+                  <a href="${item.file_url && item.file_url !== '#' ? item.file_url : '#'}" target="_blank" class="btn-download" title="${item.file_name}">
                     📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
                   </a>
                   <button onclick="editarLinkArchivo(${item.id}, '${item.file_url || ''}')" class="btn-edit" title="Editar Link (Drive, WeTransfer, etc.)">🔗</button>
@@ -412,6 +412,7 @@
                   </button>
                   <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
                 </div>`;
+            
             } else if (seccionActual === 'impresion') {
               return `
                 <div class="item-row">
