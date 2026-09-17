@@ -679,6 +679,16 @@ app.get('/ot/:id', async (req, res) => {
     if (otRes.rows.length === 0) return res.status(404).send('Orden de trabajo no encontrada');
 
     const ot = otRes.rows[0];
+    const fechaEmision = new Date(ot.created_at).toLocaleDateString('es-AR');
+
+    // Calcular o recuperar la fecha de entrega sumando 3 días si no está definida
+    let fechaEntregaMostrar = ot.fecha_prometida;
+    if (!fechaEntregaMostrar) {
+      const d = new Date(ot.created_at);
+      d.setDate(d.getDate() + 3);
+      fechaEntregaMostrar = d.toLocaleDateString('es-AR');
+    }
+
     const itemsRes = await pool.query(`
       SELECT 
         woi.*, 
