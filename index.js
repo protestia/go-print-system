@@ -24,7 +24,7 @@ if (!fs.existsSync(IMAGENES_DIR)) {
 }
 app.use('/Imagenes', express.static(IMAGENES_DIR));
 
-// Inicialización automática de tablas y columnas nuevas para Entrega
+// Inicialización automática de tablas y columnas nuevas para Entrega y Notas
 async function inicializarBaseDeDatos() {
   try {
     await pool.query(`
@@ -67,6 +67,7 @@ async function inicializarBaseDeDatos() {
         fecha_prometida VARCHAR(100),
         entregado_por VARCHAR(255),
         fecha_entrega VARCHAR(100),
+        notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -93,6 +94,7 @@ async function inicializarBaseDeDatos() {
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS fecha_prometida VARCHAR(100);
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS entregado_por VARCHAR(255);
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS fecha_entrega VARCHAR(100);
+      ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS notes TEXT;
     `);
 
     const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
@@ -265,7 +267,6 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
   let clientName = datosExtraidos.client_name || emailSender.replace(/<.*>/, '').replace(/"/g, '').trim() || 'Cliente';
   const allUrls = filesData.map(f => f.url).join(',');
 
-  // Calcular la fecha prometida sumando 3 días a la fecha actual
   const d = new Date();
   d.setDate(d.getDate() + 3);
   const fechaPrometidaStr = d.toLocaleDateString('es-AR');
@@ -426,7 +427,7 @@ app.get('/api/ordenes/:estado', async (req, res) => {
           WHERE woi.work_order_id = wo.id
         ), 0) AS total_price,
         wo.status, wo.original_files, wo.created_at, wo.email_id,
-        wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega,
+        wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes,
         COALESCE(
           json_agg(
             json_build_object(
@@ -450,7 +451,7 @@ app.get('/api/ordenes/:estado', async (req, res) => {
       LEFT JOIN print_types pt ON woi.print_type_id = pt.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
       WHERE UPPER(COALESCE(wo.status, 'PENDING_DESIGN')) = UPPER($1)
-      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega
+      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes
       ORDER BY wo.created_at DESC;
     `;
     const result = await pool.query(query, [statusFilter]);
@@ -507,7 +508,6 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
     await pool.query(`UPDATE work_order_items SET width_cm = $1, height_cm = $2, copies = $3, area_m2 = $4 WHERE id = $5;`, 
       [esUnitario ? 0 : width_cm, esUnitario ? 0 : height_cm, copies, area_m2.toFixed(2), id]);
 
-    // Recalcular total de OT
     const allItems = await pool.query(`
       SELECT woi.*, COALESCE(pr.price_per_m2, 0) AS price_per_m2, m.name AS material_name 
       FROM work_order_items woi
@@ -585,7 +585,6 @@ app.delete('/api/ordenes/item/:id', async (req, res) => {
   try {
     const itemRes = await pool.query(`SELECT work_order_id FROM work_order_items WHERE id = $1;`, [id]);
     if (itemRes.rows.length === 0) return res.status(404).json({ error: 'No encontrado' });
-    const workOrderId = itemRes.rows[0].work_order_id;
     await pool.query(`DELETE FROM work_order_items WHERE id = $1;`, [id]);
     res.json({ success: true });
   } catch (err) {
@@ -608,9 +607,8 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/orders/manual', async (req, res) => {
   try {
-    const { clientName, clientEmail, notes } = req.body; // <--- 1. Agregamos 'notes' aquí
+    const { clientName, clientEmail, notes } = req.body;
 
-    // Calcular la fecha prometida sumando 3 días a la fecha actual
     const d = new Date();
     d.setDate(d.getDate() + 3);
     const fechaPrometidaStr = d.toLocaleDateString('es-AR');
@@ -619,7 +617,7 @@ app.post('/api/orders/manual', async (req, res) => {
       INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, fecha_prometida, notes, created_at)
       VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, $3, $4, NOW())
       RETURNING *
-    `, [clientName || 'Cliente Mostrador', clientEmail || '', fechaPrometidaStr, notes || '']); // <--- 2. Lo pasamos al SQL
+    `, [clientName || 'Cliente Mostrador', clientEmail || '', fechaPrometidaStr, notes || '']);
 
     res.json({ success: true, order: newOrder.rows[0] });
   } catch (error) {
@@ -680,7 +678,6 @@ app.get('/ot/:id', async (req, res) => {
     const ot = otRes.rows[0];
     const fechaEmision = new Date(ot.created_at).toLocaleDateString('es-AR');
 
-    // Calcular o recuperar la fecha de entrega sumando 3 días si no está definida
     let fechaEntregaMostrar = ot.fecha_prometida;
     if (!fechaEntregaMostrar) {
       const d = new Date(ot.created_at);
@@ -753,7 +750,6 @@ app.get('/ot/:id', async (req, res) => {
     });
 
     const otFormateada = `OT ${String(ot.id).padStart(2, '0')}`;
-    // (Aquí ya estaba borrada la duplicada de fechaEmision)
 
     let filasHTML = '';
     let totalGeneral = 0;
