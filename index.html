@@ -214,7 +214,8 @@
   </div>
 
   <script>
-   let seccionActual = 'diseno';
+  <script>
+    let seccionActual = 'diseno';
     let currentOtIdParaAgregar = null;
     let usuarioActual = JSON.parse(localStorage.getItem('goprint_user') || 'null');
     let todasLasOrdenesActuales = []; // 📦 Variable global para almacenar las órdenes y permitir el filtro en tiempo real
@@ -223,7 +224,7 @@
       if (usuarioActual) mostrarApp();
     };
 
-    / 🔄 Auto-refresh cada 5 segundos
+    // 🔄 Auto-refresh cada 5 segundos
     setInterval(() => {
       if (usuarioActual && typeof cargarOrdenes === 'function') {
         const inputBuscar = document.getElementById('input-buscar');
