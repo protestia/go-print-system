@@ -849,7 +849,7 @@ app.get('/ot/:id', async (req, res) => {
           <tr>
             <td width="50%" style="font-weight: bold; font-size: 12px; background: #f0f0f0;">CLIENTE: ${ot.client_name.toUpperCase()}</td>
             <td width="25%" class="text-center" style="font-size: 11px;">${fechaEmision}</td>
-            <td width="25%" class="text-center" style="font-size: 11px;">Fecha Entrega: ${fechaEmision}</td>
+            <td width="25%" class="text-center" style="font-size: 11px;">Fecha Entrega: ${fechaEntregaMostrar}</td>
           </tr>
         </table>
 
