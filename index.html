@@ -223,6 +223,16 @@
       if (usuarioActual) mostrarApp();
     };
 
+    / 🔄 Auto-refresh cada 5 segundos
+    setInterval(() => {
+      if (usuarioActual && typeof cargarOrdenes === 'function') {
+        const inputBuscar = document.getElementById('input-buscar');
+        if (!inputBuscar || inputBuscar.value.trim() === '') {
+          cargarOrdenes();
+        }
+      }
+    }, 5000);
+
     async function realizarLogin(e) {
       e.preventDefault();
       const username = document.getElementById('login-user').value.trim();
@@ -506,6 +516,10 @@
               ${seccionActual === 'diseno' ? `<button onclick="editarCliente(${ot.ot_numero}, '${ot.client_name || ''}')" class="btn-edit" title="Editar cliente">✏️</button>` : ''}
               <br><span class="email-tag">(${ot.client_email})</span>
             </div>
+
+            <!-- 👇 Las notas se verán aquí con un fondo destacado si fueron escritas -->
+            ${ot.notes ? `<div class="data-group" style="background: #fef3c7; padding: 6px; border-radius: 6px; margin-top: 4px; font-size: 0.85rem;"><span>📝 Notas:</span> ${ot.notes}</div>` : ''}
+
             <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
             <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
             <div class="data-group"><span>Total:</span> $${Number(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
