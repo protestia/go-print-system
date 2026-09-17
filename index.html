@@ -217,7 +217,7 @@
     let seccionActual = 'diseno';
     let currentOtIdParaAgregar = null;
     let usuarioActual = JSON.parse(localStorage.getItem('goprint_user') || 'null');
-    let todasLasOrdenesActuales = []; // 📦 Variable global para almacenar las órdenes y permitir el filtro en tiempo real
+    let todasLasOrdenesActuales = [];
 
     window.onload = function() {
       if (usuarioActual) mostrarApp();
@@ -329,7 +329,6 @@
       };
       document.getElementById('seccion-titulo').innerText = titulos[seccion] || '';
 
-      // Limpiar el buscador al cambiar de sección
       const inputBuscar = document.getElementById('input-buscar');
       if (inputBuscar) inputBuscar.value = '';
 
@@ -347,7 +346,6 @@
       }
     }
 
-    // 🔍 Función de filtrado en tiempo real por cliente o número de OT
     function filtrarOrdenes() {
       const inputEl = document.getElementById('input-buscar');
       if (!inputEl) return;
@@ -362,7 +360,6 @@
       renderizarOrdenes(filtradas);
     }
 
-    // 🎨 Función que dibuja las tarjetas en la interfaz
     function renderizarOrdenes(ordenes) {
       const container = document.getElementById('orders-container');
       container.innerHTML = '';
@@ -402,16 +399,12 @@
             const urlFile = item.file_url || '#';
             const esWarning = !esUnitario && (ancho === 0 || alto === 0);
 
-            // ========================================================
-            // 👇 PEGA TU BLOQUE NUEVO AQUÍ MISMO PARA LA SECCIÓN DISEÑO
-            // ========================================================
             if (seccionActual === 'diseno') {
               return `
                 <div class="item-row ${esWarning ? 'warning-item' : ''}">
                   <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}">
                     📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
                   </a>
-                  <!-- 🔗 Botón para editar/pegar cualquier link (Drive, WeTransfer, etc.) -->
                   <button onclick="editarLinkArchivo(${item.id}, '${item.file_url || ''}')" class="btn-edit" title="Editar Link (Drive, WeTransfer, etc.)">🔗</button>
                   <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
                   <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
@@ -420,8 +413,6 @@
                   <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
                 </div>`;
             } else if (seccionActual === 'impresion') {
-
-            if (seccionActual === 'diseno') {
               return `
                 <div class="item-row">
                   <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
@@ -524,7 +515,6 @@
               <br><span class="email-tag">(${ot.client_email})</span>
             </div>
 
-            <!-- 👇 Las notas se verán aquí con un fondo destacado si fueron escritas -->
             ${ot.notes ? `<div class="data-group" style="background: #fef3c7; padding: 6px; border-radius: 6px; margin-top: 4px; font-size: 0.85rem;"><span>📝 Notas:</span> ${ot.notes}</div>` : ''}
 
             <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
@@ -601,6 +591,18 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ width_cm: parseFloat(nuevoAncho), height_cm: parseFloat(nuevoAlto), copies: parseInt(nuevasCopias) })
+      });
+      cargarOrdenes();
+    }
+
+    async function editarLinkArchivo(itemId, urlActual) {
+      const nuevoLink = prompt("Pega aquí cualquier link (Google Drive, WeTransfer, Imagen JPG/PNG, etc.):", urlActual === '#' ? '' : urlActual);
+      if (nuevoLink === null) return;
+
+      await fetch(`/api/ordenes/item-url/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_url: nuevoLink.trim() || '#' })
       });
       cargarOrdenes();
     }
