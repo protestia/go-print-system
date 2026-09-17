@@ -670,7 +670,6 @@ app.put('/api/ordenes/cliente/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-// Comprobante PDF / HTML Restaurado con el diseño original
 app.get('/ot/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -754,7 +753,7 @@ app.get('/ot/:id', async (req, res) => {
     });
 
     const otFormateada = `OT ${String(ot.id).padStart(2, '0')}`;
-    const fechaEmision = new Date(ot.created_at).toLocaleDateString('es-AR');
+    // (Aquí ya estaba borrada la duplicada de fechaEmision)
 
     let filasHTML = '';
     let totalGeneral = 0;
