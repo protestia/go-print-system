@@ -223,9 +223,16 @@
       if (usuarioActual) mostrarApp();
     };
 
-    // 🔄 Auto-refresh cada 5 segundos
+    // 🔄 Auto-refresh inteligente (Se pausa automáticamente si alguien está escribiendo)
     setInterval(() => {
       if (usuarioActual && typeof cargarOrdenes === 'function') {
+        
+        // Si el usuario tiene un input o textarea seleccionado escribiendo, NO recargamos para no interrumpir
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
+          return; 
+        }
+
         const inputBuscar = document.getElementById('input-buscar');
         if (!inputBuscar || inputBuscar.value.trim() === '') {
           cargarOrdenes();
