@@ -422,59 +422,6 @@
             const esWarning = !esUnitario && (ancho === 0 || alto === 0);
 
             if (seccionActual === 'diseno') {
-              return `
-                <div class="item-row ${esWarning ? 'warning-item' : ''}">
-                  <a href="${item.file_url && item.file_url !== '#' ? item.file_url : '#'}" target="_blank" class="btn-download" title="${item.file_name}">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                  <button onclick="editarLinkArchivo(${item.id}, '${item.file_url || ''}')" class="btn-edit" title="Editar Link (Drive, WeTransfer, etc.)">🔗</button>
-                  <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
-                  <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
-                    📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
-                  </button>
-                  <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
-                </div>`;
-            
-            } else if (seccionActual === 'impresion') {
-              return `
-                <div class="item-row">
-                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
-                    <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'printed', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
-                    ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
-                  </label>
-                </div>`;
-            } else if (seccionActual === 'entrega') {
-              return `
-                <div class="item-row">
-                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_delivered_item ? '#10b981' : '#64748b'};">
-                    <input type="checkbox" ${item.is_delivered_item ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'delivered', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
-                    ${item.is_delivered_item ? 'LISTO ✔️' : 'Pendiente'}
-                  </label>
-                </div>`;
-            } else {
-              return `
-                <div class="item-row">
-                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                </div>`;
-            }
-          }).join('');
-        }
-
-        const materialesUnicos = [...new Set(resumenMateriales)].join(', ');
-
-        let botonSiguiente = '';
-        let seccionBotonesExtras = '';
-        let seccionEntregaExtra = '';
-
-        if (seccionActual === 'diseno') {
           const disabledAttr = tieneMedidaFaltante ? 'disabled title="Debe cargar las medidas antes de avanzar"' : '';
           botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_PRINT')" class="btn btn-status" ${disabledAttr}>Pasar a Impresión ➔</button>`;
           seccionBotonesExtras = `
@@ -512,19 +459,6 @@
             botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
           }
           seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-        } else if (seccionActual === 'historial') {
-          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-        }
-
-          seccionEntregaExtra += `
-            <div class="input-group" style="margin-top: 10px;">
-              <label>Entregado por:</label>
-              <input type="text" class="input-custom" value="${ot.entregado_por || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)" placeholder="Nombre del empleado">
-            </div>
-            <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
-              <label>Fecha de Entrega:</label>
-              <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)" placeholder="Ej. 26/09/2026">
-            </div>`;
         } else if (seccionActual === 'historial') {
           seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
         }
