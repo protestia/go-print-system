@@ -495,6 +495,19 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
   }
 });
 
+// 🔗 Endpoint para actualizar el link personalizado del ítem
+app.put('/api/ordenes/item-url/:id', async (req, res) => {
+  const { id } = req.params;
+  const { file_url } = req.body;
+  try {
+    await pool.query(`UPDATE work_order_items SET file_url = $1 WHERE id = $2;`, [file_url, id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error al actualizar link:', err);
+    res.status(500).json({ error: 'Error al actualizar el link del archivo' });
+  }
+});
+
 app.put('/api/ordenes/item-nombre/:id', async (req, res) => {
   const { id } = req.params;
   const { file_name } = req.body;
