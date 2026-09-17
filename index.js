@@ -608,7 +608,7 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/orders/manual', async (req, res) => {
   try {
-    const { clientName, clientEmail } = req.body;
+    const { clientName, clientEmail, notes } = req.body; // <--- 1. Agregamos 'notes' aquí
 
     // Calcular la fecha prometida sumando 3 días a la fecha actual
     const d = new Date();
@@ -616,10 +616,10 @@ app.post('/api/orders/manual', async (req, res) => {
     const fechaPrometidaStr = d.toLocaleDateString('es-AR');
 
     const newOrder = await pool.query(`
-      INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, fecha_prometida, created_at)
-      VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, $3, NOW())
+      INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, fecha_prometida, notes, created_at)
+      VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, $3, $4, NOW())
       RETURNING *
-    `, [clientName || 'Cliente Mostrador', clientEmail || '', fechaPrometidaStr]);
+    `, [clientName || 'Cliente Mostrador', clientEmail || '', fechaPrometidaStr, notes || '']); // <--- 2. Lo pasamos al SQL
 
     res.json({ success: true, order: newOrder.rows[0] });
   } catch (error) {
