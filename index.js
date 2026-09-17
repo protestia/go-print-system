@@ -265,12 +265,17 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
   let clientName = datosExtraidos.client_name || emailSender.replace(/<.*>/, '').replace(/"/g, '').trim() || 'Cliente';
   const allUrls = filesData.map(f => f.url).join(',');
 
+  // Calcular la fecha prometida sumando 3 días a la fecha actual
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  const fechaPrometidaStr = d.toLocaleDateString('es-AR');
+
   const otResult = await pool.query(`
-    INSERT INTO work_orders (client_name, client_email, width_cm, height_cm, copies, total_price, original_files, status, email_id)
-    VALUES ($1, $2, 0, 0, 0, 0, $3, 'PENDING_DESIGN', $4)
+    INSERT INTO work_orders (client_name, client_email, width_cm, height_cm, copies, total_price, original_files, status, email_id, fecha_prometida)
+    VALUES ($1, $2, 0, 0, 0, 0, $3, 'PENDING_DESIGN', $4, $5)
     ON CONFLICT (email_id) DO NOTHING
     RETURNING *;
-  `, [clientName, emailSender, allUrls || '#', emailId]);
+  `, [clientName, emailSender, allUrls || '#', emailId, fechaPrometidaStr]);
 
   if (otResult.rows.length === 0) return null;
   const newOT = otResult.rows[0];
@@ -604,11 +609,18 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/orders/manual', async (req, res) => {
   try {
     const { clientName, clientEmail } = req.body;
+
+    // Calcular la fecha prometida sumando 3 días a la fecha actual
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    const fechaPrometidaStr = d.toLocaleDateString('es-AR');
+
     const newOrder = await pool.query(`
-      INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, created_at)
-      VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, NOW())
+      INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, fecha_prometida, created_at)
+      VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, $3, NOW())
       RETURNING *
-    `, [clientName || 'Cliente Mostrador', clientEmail || '']);
+    `, [clientName || 'Cliente Mostrador', clientEmail || '', fechaPrometidaStr]);
+
     res.json({ success: true, order: newOrder.rows[0] });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
