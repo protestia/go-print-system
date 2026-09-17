@@ -342,17 +342,17 @@
       cargarOrdenes();
     }
 
-    async function cargarOrdenes() {
+   async function cargarOrdenes() {
       try {
         const inputBuscar = document.getElementById('input-buscar');
-        const textoBusquedaActual = inputBuscar ? inputBuscar.value : '';
+        const textoBusquedaActual = inputBuscar ? inputBuscar.value.trim() : '';
 
         const res = await fetch(`/api/ordenes/${seccionActual}`);
         todasLasOrdenesActuales = await res.json();
 
-        // Si hay texto en el buscador, filtramos de inmediato sin perder el foco ni limpiar la vista
-        if (textoBusquedaActual.trim() !== '') {
-          const texto = textoBusquedaActual.toLowerCase().trim();
+        // Si hay texto en el buscador, filtramos inmediatamente los datos nuevos
+        if (textoBusquedaActual !== '') {
+          const texto = textoBusquedaActual.toLowerCase();
           const filtradas = todasLasOrdenesActuales.filter(ot => {
             const cliente = (ot.client_name || '').toLowerCase();
             const otNum = String(ot.ot_numero || '');
@@ -367,7 +367,7 @@
         document.getElementById('orders-container').innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes desde el servidor.</p>';
       }
     }
-
+    
     function filtrarOrdenes() {
       const inputEl = document.getElementById('input-buscar');
       if (!inputEl) return;
