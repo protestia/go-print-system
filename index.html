@@ -487,18 +487,34 @@
           
           botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
           seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-        } else if (seccionActual === 'entrega') {
+        } else if (seccionActual === 'entrega' || seccionActual === 'historial') {
+          const esHistorial = seccionActual === 'historial';
+          const readonlyAttr = esHistorial ? 'readonly style="background: #f8fafc; border: none; color: #334155;"' : '';
+
           seccionEntregaExtra += `
             <div class="input-group">
               <label>Entrega (Fecha Prometida):</label>
-              <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)" placeholder="Ej. Viernes 15hs">
+              <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)"` : readonlyAttr} placeholder="No especificada">
+            </div>
+            <div class="input-group" style="margin-top: 10px;">
+              <label>Entregado por:</label>
+              <input type="text" class="input-custom" value="${ot.entregado_por || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)"` : readonlyAttr} placeholder="No especificado">
+            </div>
+            <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
+              <label>Fecha de Entrega:</label>
+              <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)"` : readonlyAttr} placeholder="No especificada">
             </div>`;
 
-          const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
-          const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
+          if (seccionActual === 'entrega') {
+            const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
+            const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
 
-          botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
+            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
+          }
           seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+        } else if (seccionActual === 'historial') {
+          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+        }
 
           seccionEntregaExtra += `
             <div class="input-group" style="margin-top: 10px;">
