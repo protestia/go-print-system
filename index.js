@@ -211,6 +211,18 @@ async function descargarAdjuntosGmail(gmail, messageId, emailBody, emailHtmlBody
   return archivosGuardados;
 }
 
+async function editarLinkArchivo(itemId, urlActual) {
+      const nuevoLink = prompt("Pega aquí cualquier link (Google Drive, WeTransfer, Imagen JPG/PNG, etc.):", urlActual === '#' ? '' : urlActual);
+      if (nuevoLink === null) return;
+
+      await fetch(`/api/ordenes/item-url/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_url: nuevoLink.trim() || '#' })
+      });
+      cargarOrdenes();
+    }
+
 async function extraerDatosOrdenConIA(emailSubject, emailBody, attachmentNames, listaMaterialesValidos, listaPrintTypesValidos) {
   const prompt = `
     Eres el motor de procesamiento inteligente de una imprenta profesional. Analiza el correo e incluye los ítems.
