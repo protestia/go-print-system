@@ -344,9 +344,24 @@
 
     async function cargarOrdenes() {
       try {
+        const inputBuscar = document.getElementById('input-buscar');
+        const textoBusquedaActual = inputBuscar ? inputBuscar.value : '';
+
         const res = await fetch(`/api/ordenes/${seccionActual}`);
         todasLasOrdenesActuales = await res.json();
-        renderizarOrdenes(todasLasOrdenesActuales);
+
+        // Si hay texto en el buscador, filtramos de inmediato sin perder el foco ni limpiar la vista
+        if (textoBusquedaActual.trim() !== '') {
+          const texto = textoBusquedaActual.toLowerCase().trim();
+          const filtradas = todasLasOrdenesActuales.filter(ot => {
+            const cliente = (ot.client_name || '').toLowerCase();
+            const otNum = String(ot.ot_numero || '');
+            return cliente.includes(texto) || otNum.includes(texto);
+          });
+          renderizarOrdenes(filtradas);
+        } else {
+          renderizarOrdenes(todasLasOrdenesActuales);
+        }
       } catch (err) {
         console.error(err);
         document.getElementById('orders-container').innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes desde el servidor.</p>';
