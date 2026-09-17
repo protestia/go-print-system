@@ -402,12 +402,17 @@
             const urlFile = item.file_url || '#';
             const esWarning = !esUnitario && (ancho === 0 || alto === 0);
 
+            // ========================================================
+            // 👇 PEGA TU BLOQUE NUEVO AQUÍ MISMO PARA LA SECCIÓN DISEÑO
+            // ========================================================
             if (seccionActual === 'diseno') {
               return `
                 <div class="item-row ${esWarning ? 'warning-item' : ''}">
                   <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}">
                     📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
                   </a>
+                  <!-- 🔗 Botón para editar/pegar cualquier link (Drive, WeTransfer, etc.) -->
+                  <button onclick="editarLinkArchivo(${item.id}, '${item.file_url || ''}')" class="btn-edit" title="Editar Link (Drive, WeTransfer, etc.)">🔗</button>
                   <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
                   <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
                     📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
@@ -415,6 +420,8 @@
                   <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
                 </div>`;
             } else if (seccionActual === 'impresion') {
+
+            if (seccionActual === 'diseno') {
               return `
                 <div class="item-row">
                   <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
