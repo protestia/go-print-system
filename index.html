@@ -214,7 +214,7 @@
   </div>
 
   <script>
-    let seccionActual = 'diseno';
+   let seccionActual = 'diseno';
     let currentOtIdParaAgregar = null;
     let usuarioActual = JSON.parse(localStorage.getItem('goprint_user') || 'null');
     let todasLasOrdenesActuales = []; // 📦 Variable global para almacenar las órdenes y permitir el filtro en tiempo real
@@ -339,7 +339,9 @@
 
     // 🔍 Función de filtrado en tiempo real por cliente o número de OT
     function filtrarOrdenes() {
-      const texto = document.getElementById('input-buscar').value.toLowerCase().trim();
+      const inputEl = document.getElementById('input-buscar');
+      if (!inputEl) return;
+      const texto = inputEl.value.toLowerCase().trim();
       
       const filtradas = todasLasOrdenesActuales.filter(ot => {
         const cliente = (ot.client_name || '').toLowerCase();
@@ -521,10 +523,6 @@
             ${botonEliminarOrden}
           </div>`;
       });
-    } catch (err) {
-        console.error(err);
-        container.innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes.</p>';
-      }
     }
 
     async function toggleItemStatus(itemId, tipo, isChecked) {
