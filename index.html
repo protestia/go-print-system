@@ -128,9 +128,11 @@
       </div>
     </div>
 
-    <div class="content">
+  <div class="content">
       <div class="header">
         <h1 id="seccion-titulo">Área de Diseño 🎨</h1>
+        <!-- 🔍 Barra de Búsqueda -->
+        <input type="text" id="input-buscar" placeholder="🔍 Buscar por cliente o Nº de OT..." oninput="filtrarOrdenes()" style="padding: 10px 15px; width: 300px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.9rem; outline: none; background: white;">
       </div>
       <div class="grid" id="orders-container"></div>
     </div>
@@ -215,6 +217,7 @@
     let seccionActual = 'diseno';
     let currentOtIdParaAgregar = null;
     let usuarioActual = JSON.parse(localStorage.getItem('goprint_user') || 'null');
+    let todasLasOrdenesActuales = []; // 📦 Variable global para almacenar las órdenes y permitir el filtro en tiempo real
 
     window.onload = function() {
       if (usuarioActual) mostrarApp();
@@ -316,186 +319,209 @@
       };
       document.getElementById('seccion-titulo').innerText = titulos[seccion] || '';
 
+      // Limpiar el buscador al cambiar de sección
+      const inputBuscar = document.getElementById('input-buscar');
+      if (inputBuscar) inputBuscar.value = '';
+
       cargarOrdenes();
     }
 
     async function cargarOrdenes() {
-      const container = document.getElementById('orders-container');
       try {
         const res = await fetch(`/api/ordenes/${seccionActual}`);
-        const ordenes = await res.json();
-        container.innerHTML = '';
+        todasLasOrdenesActuales = await res.json();
+        renderizarOrdenes(todasLasOrdenesActuales);
+      } catch (err) {
+        console.error(err);
+        document.getElementById('orders-container').innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes desde el servidor.</p>';
+      }
+    }
 
-        if (!Array.isArray(ordenes) || ordenes.length === 0) {
-          container.innerHTML = '<p style="color: #64748b; font-weight: bold;">No hay pedidos en esta sección.</p>';
-          return;
+    // 🔍 Función de filtrado en tiempo real por cliente o número de OT
+    function filtrarOrdenes() {
+      const texto = document.getElementById('input-buscar').value.toLowerCase().trim();
+      
+      const filtradas = todasLasOrdenesActuales.filter(ot => {
+        const cliente = (ot.client_name || '').toLowerCase();
+        const otNum = String(ot.ot_numero || '');
+        return cliente.includes(texto) || otNum.includes(texto);
+      });
+
+      renderizarOrdenes(filtradas);
+    }
+
+    // 🎨 Función que dibuja las tarjetas en la interfaz
+    function renderizarOrdenes(ordenes) {
+      const container = document.getElementById('orders-container');
+      container.innerHTML = '';
+
+      if (!Array.isArray(ordenes) || ordenes.length === 0) {
+        container.innerHTML = '<p style="color: #64748b; font-weight: bold;">No se encontraron pedidos con ese criterio de búsqueda.</p>';
+        return;
+      }
+
+      ordenes.forEach(ot => {
+        let tieneMedidaFaltante = false;
+        let todosImpresos = true;
+        let todosEntregados = true;
+        let listadoItemsHTML = '';
+        let resumenMateriales = [];
+        let totalM2 = 0;
+
+        if (ot.items && ot.items.length > 0) {
+          listadoItemsHTML = ot.items.map((item) => {
+            const ancho = parseFloat(item.width_cm || 0);
+            const alto = parseFloat(item.height_cm || 0);
+            const nombreMaterial = (item.material || '').toLowerCase();
+            const esUnitario = nombreMaterial.includes('fly banner') || 
+                               nombreMaterial.includes('roll up') || 
+                               nombreMaterial.includes('portabanner') || 
+                               nombreMaterial.includes('sublimado') ||
+                               nombreMaterial.includes('base cruz') ||
+                               nombreMaterial.includes('contrapeso');
+
+            if (!esUnitario && (ancho === 0 || alto === 0)) tieneMedidaFaltante = true;
+            if (seccionActual === 'impresion' && !item.is_printed) todosImpresos = false;
+            if (seccionActual === 'entrega' && !item.is_delivered_item) todosEntregados = false;
+
+            totalM2 += esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
+            if (item.material) resumenMateriales.push(`${item.material} (${item.impresion || 'Std'})`);
+            
+            const urlFile = item.file_url || '#';
+            const esWarning = !esUnitario && (ancho === 0 || alto === 0);
+
+            if (seccionActual === 'diseno') {
+              return `
+                <div class="item-row ${esWarning ? 'warning-item' : ''}">
+                  <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}">
+                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                  </a>
+                  <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
+                  <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
+                    📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
+                  </button>
+                  <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
+                </div>`;
+            } else if (seccionActual === 'impresion') {
+              return `
+                <div class="item-row">
+                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
+                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                  </a>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
+                    <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'printed', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                    ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
+                  </label>
+                </div>`;
+            } else if (seccionActual === 'entrega') {
+              return `
+                <div class="item-row">
+                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
+                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                  </a>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_delivered_item ? '#10b981' : '#64748b'};">
+                    <input type="checkbox" ${item.is_delivered_item ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'delivered', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                    ${item.is_delivered_item ? 'LISTO ✔️' : 'Pendiente'}
+                  </label>
+                </div>`;
+            } else {
+              return `
+                <div class="item-row">
+                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
+                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+                  </a>
+                </div>`;
+            }
+          }).join('');
         }
 
-        ordenes.forEach(ot => {
-          let tieneMedidaFaltante = false;
-          let todosImpresos = true;
-          let todosEntregados = true;
-          let listadoItemsHTML = '';
-          let resumenMateriales = [];
-          let totalM2 = 0;
+        const materialesUnicos = [...new Set(resumenMateriales)].join(', ');
 
-          if (ot.items && ot.items.length > 0) {
-            listadoItemsHTML = ot.items.map((item) => {
-              const ancho = parseFloat(item.width_cm || 0);
-              const alto = parseFloat(item.height_cm || 0);
-              const nombreMaterial = (item.material || '').toLowerCase();
-              const esUnitario = nombreMaterial.includes('fly banner') || 
-                                 nombreMaterial.includes('roll up') || 
-                                 nombreMaterial.includes('portabanner') || 
-                                 nombreMaterial.includes('sublimado') ||
-                                 nombreMaterial.includes('base cruz') ||
-                                 nombreMaterial.includes('contrapeso');
+        let botonSiguiente = '';
+        let seccionBotonesExtras = '';
+        let seccionEntregaExtra = '';
 
-              if (!esUnitario && (ancho === 0 || alto === 0)) tieneMedidaFaltante = true;
-              if (seccionActual === 'impresion' && !item.is_printed) todosImpresos = false;
-              if (seccionActual === 'entrega' && !item.is_delivered_item) todosEntregados = false;
-
-              totalM2 += esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
-              if (item.material) resumenMateriales.push(`${item.material} (${item.impresion || 'Std'})`);
-              
-              const urlFile = item.file_url || '#';
-              const esWarning = !esUnitario && (ancho === 0 || alto === 0);
-
-              if (seccionActual === 'diseno') {
-                return `
-                  <div class="item-row ${esWarning ? 'warning-item' : ''}">
-                    <a href="${urlFile}" target="_blank" class="btn-download" title="${item.file_name}">
-                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                    </a>
-                    <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
-                    <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
-                      📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
-                    </button>
-                    <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
-                  </div>`;
-              } else if (seccionActual === 'impresion') {
-                return `
-                  <div class="item-row">
-                    <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                    </a>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
-                      <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'printed', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
-                      ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
-                    </label>
-                  </div>`;
-              } else if (seccionActual === 'entrega') {
-                return `
-                  <div class="item-row">
-                    <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                    </a>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_delivered_item ? '#10b981' : '#64748b'};">
-                      <input type="checkbox" ${item.is_delivered_item ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'delivered', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
-                      ${item.is_delivered_item ? 'LISTO ✔️' : 'Pendiente'}
-                    </label>
-                  </div>`;
-              } else {
-                return `
-                  <div class="item-row">
-                    <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                      📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                    </a>
-                  </div>`;
-              }
-            }).join('');
-          }
-
-          const materialesUnicos = [...new Set(resumenMateriales)].join(', ');
-
-          let botonSiguiente = '';
-          let seccionBotonesExtras = '';
-          let seccionEntregaExtra = '';
-
-          if (seccionActual === 'diseno') {
-            const disabledAttr = tieneMedidaFaltante ? 'disabled title="Debe cargar las medidas antes de avanzar"' : '';
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_PRINT')" class="btn btn-status" ${disabledAttr}>Pasar a Impresión ➔</button>`;
-            seccionBotonesExtras = `
-              <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
-              <a href="${ot.client_email ? `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(ot.client_email)}` : 'https://mail.google.com'}" target="_blank" class="btn btn-gmail">✉️ Responder Gmail Cliente</a>
-            `;
-          } else if (seccionActual === 'impresion') {
-            const disabledEntrega = !todosImpresos ? 'disabled title="Debe tildar/verificar todos los archivos antes de pasar a entrega"' : '';
-            const bgEntrega = todosImpresos ? '#0ada56' : '#cbd5e1';
-            
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
-            seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-          } else if (seccionActual === 'entrega') {
-            // Sección superior: Entrega (Fecha Prometida)
-            seccionEntregaExtra += `
-              <div class="input-group">
-                <label>Entrega (Fecha Prometida):</label>
-                <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)" placeholder="Ej. Viernes 15hs">
-              </div>`;
-
-            const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
-            const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
-
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
-            
-            seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-
-            // Sección inferior: Entregado por y Fecha de Entrega
-            seccionEntregaExtra += `
-              <div class="input-group" style="margin-top: 10px;">
-                <label>Entregado por:</label>
-                <input type="text" class="input-custom" value="${ot.entregado_por || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)" placeholder="Nombre del empleado">
-              </div>
-              <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
-                <label>Fecha de Entrega:</label>
-                <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)" placeholder="Ej. 26/09/2026">
-              </div>`;
-          } else if (seccionActual === 'historial') {
-            seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-          }
-
-          const badgeHTML = seccionActual === 'historial'
-            ? `<span class="badge badge-success">ENTREGADO ✔️</span>`
-            : (tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`);
-
-          const botonAgregarItemHTML = seccionActual === 'diseno' 
-            ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` : '';
-
-          const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
-
-          container.innerHTML += `
-            <div class="card ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
-              <div class="card-header">
-                <h3 class="card-title">
-                  OT #${ot.ot_numero}
-                  <button onclick="editarNumeroOT(${ot.ot_numero})" class="btn-edit" title="Editar número de orden">✏️</button>
-                </h3>
-                ${badgeHTML}
-              </div>
-              
-              <div class="data-group">
-                <span>Cliente:</span> <strong>${ot.client_name || 'Sin Especificar'}</strong>
-                ${seccionActual === 'diseno' ? `<button onclick="editarCliente(${ot.ot_numero}, '${ot.client_name || ''}')" class="btn-edit" title="Editar cliente">✏️</button>` : ''}
-                <br><span class="email-tag">(${ot.client_email})</span>
-              </div>
-              <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
-              <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
-              <div class="data-group"><span>Total:</span> $${Number(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
-
-              ${seccionEntregaExtra}
-
-              <div class="file-actions">
-                <span style="font-size: 0.85rem; font-weight: bold;">Adjuntos / Ítems (${ot.items ? ot.items.length : 0}):</span>
-                <div class="attachments-container">${listadoItemsHTML}</div>
-                ${botonAgregarItemHTML}
-              </div>
-
-              ${seccionBotonesExtras}
-              ${botonSiguiente}
-              ${botonEliminarOrden}
+        if (seccionActual === 'diseno') {
+          const disabledAttr = tieneMedidaFaltante ? 'disabled title="Debe cargar las medidas antes de avanzar"' : '';
+          botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_PRINT')" class="btn btn-status" ${disabledAttr}>Pasar a Impresión ➔</button>`;
+          seccionBotonesExtras = `
+            <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
+            <a href="${ot.client_email ? `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(ot.client_email)}` : 'https://mail.google.com'}" target="_blank" class="btn btn-gmail">✉️ Responder Gmail Cliente</a>
+          `;
+        } else if (seccionActual === 'impresion') {
+          const disabledEntrega = !todosImpresos ? 'disabled title="Debe tildar/verificar todos los archivos antes de pasar a entrega"' : '';
+          const bgEntrega = todosImpresos ? '#0ada56' : '#cbd5e1';
+          
+          botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
+          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+        } else if (seccionActual === 'entrega') {
+          seccionEntregaExtra += `
+            <div class="input-group">
+              <label>Entrega (Fecha Prometida):</label>
+              <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)" placeholder="Ej. Viernes 15hs">
             </div>`;
-        });
-      } catch (err) {
+
+          const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
+          const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
+
+          botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
+          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+
+          seccionEntregaExtra += `
+            <div class="input-group" style="margin-top: 10px;">
+              <label>Entregado por:</label>
+              <input type="text" class="input-custom" value="${ot.entregado_por || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)" placeholder="Nombre del empleado">
+            </div>
+            <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
+              <label>Fecha de Entrega:</label>
+              <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)" placeholder="Ej. 26/09/2026">
+            </div>`;
+        } else if (seccionActual === 'historial') {
+          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+        }
+
+        const badgeHTML = seccionActual === 'historial'
+          ? `<span class="badge badge-success">ENTREGADO ✔️</span>`
+          : (tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`);
+
+        const botonAgregarItemHTML = seccionActual === 'diseno' 
+          ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` : '';
+
+        const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
+
+        container.innerHTML += `
+          <div class="card ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
+            <div class="card-header">
+              <h3 class="card-title">
+                OT #${ot.ot_numero}
+                <button onclick="editarNumeroOT(${ot.ot_numero})" class="btn-edit" title="Editar número de orden">✏️</button>
+              </h3>
+              ${badgeHTML}
+            </div>
+            
+            <div class="data-group">
+              <span>Cliente:</span> <strong>${ot.client_name || 'Sin Especificar'}</strong>
+              ${seccionActual === 'diseno' ? `<button onclick="editarCliente(${ot.ot_numero}, '${ot.client_name || ''}')" class="btn-edit" title="Editar cliente">✏️</button>` : ''}
+              <br><span class="email-tag">(${ot.client_email})</span>
+            </div>
+            <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
+            <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
+            <div class="data-group"><span>Total:</span> $${Number(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
+
+            ${seccionEntregaExtra}
+
+            <div class="file-actions">
+              <span style="font-size: 0.85rem; font-weight: bold;">Adjuntos / Ítems (${ot.items ? ot.items.length : 0}):</span>
+              <div class="attachments-container">${listadoItemsHTML}</div>
+              ${botonAgregarItemHTML}
+            </div>
+
+            ${seccionBotonesExtras}
+            ${botonSiguiente}
+            ${botonEliminarOrden}
+          </div>`;
+      });
+    } catch (err) {
         console.error(err);
         container.innerHTML = '<p style="color: red; font-weight: bold;">Error al cargar las órdenes.</p>';
       }
