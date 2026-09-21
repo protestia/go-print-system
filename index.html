@@ -176,9 +176,10 @@
       <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Agregar Nuevo Ítem</h3>
       
       <div style="margin-bottom: 12px;">
-        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Material:</label>
-        <select id="modal-material" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;"></select>
-      </div>
+  <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Material:</label>
+  <input type="text" id="modal-material-input" list="lista-materiales" placeholder="🔍 Tipeá para buscar material..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" autocomplete="off">
+  <datalist id="lista-materiales"></datalist>
+</div>
 
       <div style="margin-bottom: 12px;">
         <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Tipo de Impresión:</label>
@@ -635,44 +636,94 @@
       cargarOrdenes();
     }
 
-    async function agregarItemManual(otId) {
-      currentOtIdParaAgregar = otId;
-      const resCat = await fetch('/api/catalogos');
-      const catalogos = await resCat.json();
-      
-      const selectMat = document.getElementById('modal-material');
-      const selectPrint = document.getElementById('modal-print-type');
-      selectMat.innerHTML = '';
-      selectPrint.innerHTML = '';
+    let mapaMateriales = {}; // Objeto auxiliar para vincular el nombre tipeado con su ID
 
-      catalogos.materials.forEach(m => selectMat.innerHTML += `<option value="${m.id}">${m.name}</option>`);
-      catalogos.printTypes.forEach(pt => selectPrint.innerHTML += `<option value="${pt.id}">${pt.name}</option>`);
+async function agregarItemManual(otId) {
+  currentOtIdParaAgregar = otId;
+  const resCat = await fetch('/api/catalogos');
+  const catalogos = await resCat.json();
+  
+  const datalistMat = document.getElementById('lista-materiales');
+  const inputMat = document.getElementById('modal-material-input');
+  const selectPrint = document.getElementById('modal-print-type');
+  
+  datalistMat.innerHTML = '';
+  selectPrint.innerHTML = '';
+  if (inputMat) inputMat.value = '';
+  mapaMateriales = {};
 
-      document.getElementById('modal-agregar-item').style.display = 'flex';
-    }
+  // Llenamos el datalist y creamos el mapa de nombres a IDs de base de datos
+  catalogos.materials.forEach(m => {
+    mapaMateriales[m.name.toLowerCase().trim()] = m.id;
+    datalistMat.innerHTML += `<option value="${m.name}">`;
+  });
 
-    function cerrarModalItem() {
-      document.getElementById('modal-agregar-item').style.display = 'none';
-      currentOtIdParaAgregar = null;
-    }
+  catalogos.printTypes.forEach(pt => {
+    selectPrint.innerHTML += `<option value="${pt.id}">${pt.name}</option>`;
+  });
 
-    async function guardarItemManual() {
-      if (!currentOtIdParaAgregar) return;
-      const material_id = document.getElementById('modal-material').value;
-      const print_type_id = document.getElementById('modal-print-type').value;
-      const file_name = document.getElementById('modal-filename').value.trim();
-      const width_cm = document.getElementById('modal-width').value;
-      const height_cm = document.getElementById('modal-height').value;
-      const copies = document.getElementById('modal-copies').value;
+  document.getElementById('modal-agregar-item').style.display = 'flex';
+}
 
-      await fetch(`/api/ordenes/${currentOtIdParaAgregar}/item`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_name, material_id: parseInt(material_id), print_type_id: parseInt(print_type_id), width_cm: parseFloat(width_cm), height_cm: parseFloat(height_cm), copies: parseInt(copies), file_url: '#' })
-      });
+function cerrarModalItem() {
+  document.getElementById('modal-agregar-item').style.display = 'none';
+  currentOtIdParaAgregar = null;
+}
+
+async function guardarItemManual() {
+  if (!currentOtIdParaAgregar) return;
+  
+  const inputMat = document.getElementById('modal-material-input');
+  if (!inputMat) return;
+
+  const nombreIngresado = inputMat.value.trim().toLowerCase();
+  
+  // Buscar ID del material sin importar mayúsculas/minúsculas o espacios
+  let material_id = mapaMateriales[nombreIngresado];
+
+  if (!material_id) {
+    const claveEncontrada = Object.keys(mapaMateriales).find(k => k === nombreIngresado);
+    if (claveEncontrada) material_id = mapaMateriales[claveEncontrada];
+  }
+
+  if (!material_id) {
+    alert("⚠️ Por favor selecciona un material válido desplegado en la lista.");
+    return;
+  }
+
+  const print_type_id = document.getElementById('modal-print-type').value;
+  const file_name = document.getElementById('modal-filename').value.trim() || 'Diseno_Extra.cdr';
+  const width_cm = parseFloat(document.getElementById('modal-width').value) || 0;
+  const height_cm = parseFloat(document.getElementById('modal-height').value) || 0;
+  const copies = parseInt(document.getElementById('modal-copies').value) || 1;
+
+  try {
+    const res = await fetch(`/api/ordenes/${currentOtIdParaAgregar}/item`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        file_name, 
+        material_id: parseInt(material_id), 
+        print_type_id: parseInt(print_type_id), 
+        width_cm, 
+        height_cm, 
+        copies, 
+        file_url: '#' 
+      })
+    });
+
+    if (res.ok) {
       cerrarModalItem();
       cargarOrdenes();
+    } else {
+      const errData = await res.json();
+      alert("❌ Error al guardar el ítem: " + (errData.error || "Fallo en el servidor"));
     }
+  } catch (error) {
+    console.error("Error al guardar ítem:", error);
+    alert("❌ Error de conexión al guardar el ítem.");
+  }
+}
 
     function abrirModalOrdenManual() {
       document.getElementById('manual-client-name').value = '';
