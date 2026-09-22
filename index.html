@@ -120,6 +120,7 @@
         <div class="menu-item" id="btn-impresion" onclick="cargarSeccion('impresion')">🖨️ IMPRESIÓN</div>
         <div class="menu-item" id="btn-entrega" onclick="cargarSeccion('entrega')">📦 ENTREGA</div>
         <div class="menu-item" id="btn-historial" onclick="cargarSeccion('historial')">📚 HISTORIAL</div>
+        <div class="menu-item" id="btn-precios" onclick="cargarSeccion('precios')">🏷️ LISTA DE PRECIOS</div>
       </div>
 
       <div class="user-info">
@@ -128,13 +129,44 @@
       </div>
     </div>
 
-  <div class="content">
+    <div class="content">
       <div class="header">
         <h1 id="seccion-titulo">Área de Diseño 🎨</h1>
-        <!-- 🔍 Barra de Búsqueda -->
+        <!-- 🔍 Barra de Búsqueda de Órdenes -->
         <input type="text" id="input-buscar" placeholder="🔍 Buscar por cliente o Nº de OT..." oninput="filtrarOrdenes()" style="padding: 10px 15px; width: 300px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.9rem; outline: none; background: white;">
       </div>
+
+      <!-- 1. VISTA DE ÓRDENES (GRILLA) -->
       <div class="grid" id="orders-container"></div>
+
+      <!-- 2. VISTA DE LISTA DE PRECIOS (DENTRO DEL ÁREA DE CONTENIDO) -->
+      <div id="seccion-precios" style="display: none; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2 style="color: #5b3693; margin: 0;">📋 Lista de Precios Actuales</h2>
+          <input 
+            type="text" 
+            id="input-buscar-precio" 
+            placeholder="🔍 Buscar material o tecnología..." 
+            onkeyup="filtrarMateriales()"
+            style="padding: 10px 16px; width: 320px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none;"
+          >
+        </div>
+
+        <div style="background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background-color: #5b3693; color: white; text-align: left;">
+                <th style="padding: 12px 16px;">Material</th>
+                <th style="padding: 12px 16px; text-align: center;">Modelo de Cobro</th>
+                <th style="padding: 12px 16px;">Tecnologías y Precios</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-lista-precios">
+              <!-- Se llena dinámicamente desde listaPrecios.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -176,10 +208,10 @@
       <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Agregar Nuevo Ítem</h3>
       
       <div style="margin-bottom: 12px;">
-  <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Material:</label>
-  <input type="text" id="modal-material-input" list="lista-materiales" placeholder="🔍 Tipeá para buscar material..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" autocomplete="off">
-  <datalist id="lista-materiales"></datalist>
-</div>
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Material:</label>
+        <input type="text" id="modal-material-input" list="lista-materiales" placeholder="🔍 Tipeá para buscar material..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" autocomplete="off">
+        <datalist id="lista-materiales"></datalist>
+      </div>
 
       <div style="margin-bottom: 12px;">
         <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Tipo de Impresión:</label>
@@ -213,6 +245,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Carga del módulo JS de la lista de precios -->
+  <script src="/listaPrecios.js"></script>
   
   <script>
     let seccionActual = 'diseno';
@@ -224,9 +259,11 @@
       if (usuarioActual) mostrarApp();
     };
 
-    // 🔄 Auto-refresh inteligente (Se pausa automáticamente si alguien está escribiendo)
+    // 🔄 Auto-refresh inteligente (PAUSA cuando estás en 'precios' o escribiendo)
     setInterval(() => {
       if (usuarioActual && typeof cargarOrdenes === 'function') {
+        if (seccionActual === 'precios') return; // No hacer polling en lista de precios
+
         const activeTag = document.activeElement ? document.activeElement.tagName : '';
         if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
           return; 
@@ -331,17 +368,42 @@
         diseno: 'Área de Diseño 🎨',
         impresion: 'Área de Impresión 🖨️',
         entrega: 'Área de Entrega 📦',
-        historial: 'Historial de Órdenes Entregadas 📚'
+        historial: 'Historial de Órdenes Entregadas 📚',
+        precios: 'Lista de Precios Actuales 📋'
       };
-      document.getElementById('seccion-titulo').innerText = titulos[seccion] || '';
+      
+      const tituloEl = document.getElementById('seccion-titulo');
+      if (tituloEl) tituloEl.innerText = titulos[seccion] || '';
 
       const inputBuscar = document.getElementById('input-buscar');
       if (inputBuscar) inputBuscar.value = '';
 
-      cargarOrdenes();
+      // VISTAS CONTROL
+      const containerOrdenes = document.getElementById('orders-container');
+      const seccionPrecios = document.getElementById('seccion-precios');
+      const inputBuscarOT = document.getElementById('input-buscar');
+
+      if (seccion === 'precios') {
+        if (containerOrdenes) containerOrdenes.style.display = 'none';
+        if (inputBuscarOT) inputBuscarOT.style.display = 'none';
+        if (seccionPrecios) seccionPrecios.style.display = 'block';
+
+        if (typeof cargarListaPrecios === 'function') {
+          cargarListaPrecios();
+        }
+      } else {
+        if (seccionPrecios) seccionPrecios.style.display = 'none';
+        if (inputBuscarOT) inputBuscarOT.style.display = 'block';
+        if (containerOrdenes) containerOrdenes.style.display = 'grid';
+
+        cargarOrdenes();
+      }
     }
 
     async function cargarOrdenes() {
+      // SI ESTAMOS EN PRECIOS, SALIR DE INMEDIATO Y NO REALIZAR FETCH DE ÓRDENES
+      if (seccionActual === 'precios') return;
+
       try {
         const inputBuscar = document.getElementById('input-buscar');
         const textoBusquedaActual = inputBuscar ? inputBuscar.value.trim() : '';
@@ -636,94 +698,91 @@
       cargarOrdenes();
     }
 
-    let mapaMateriales = {}; // Objeto auxiliar para vincular el nombre tipeado con su ID
+    let mapaMateriales = {};
 
-async function agregarItemManual(otId) {
-  currentOtIdParaAgregar = otId;
-  const resCat = await fetch('/api/catalogos');
-  const catalogos = await resCat.json();
-  
-  const datalistMat = document.getElementById('lista-materiales');
-  const inputMat = document.getElementById('modal-material-input');
-  const selectPrint = document.getElementById('modal-print-type');
-  
-  datalistMat.innerHTML = '';
-  selectPrint.innerHTML = '';
-  if (inputMat) inputMat.value = '';
-  mapaMateriales = {};
+    async function agregarItemManual(otId) {
+      currentOtIdParaAgregar = otId;
+      const resCat = await fetch('/api/catalogos');
+      const catalogos = await resCat.json();
+      
+      const datalistMat = document.getElementById('lista-materiales');
+      const inputMat = document.getElementById('modal-material-input');
+      const selectPrint = document.getElementById('modal-print-type');
+      
+      datalistMat.innerHTML = '';
+      selectPrint.innerHTML = '';
+      if (inputMat) inputMat.value = '';
+      mapaMateriales = {};
 
-  // Llenamos el datalist y creamos el mapa de nombres a IDs de base de datos
-  catalogos.materials.forEach(m => {
-    mapaMateriales[m.name.toLowerCase().trim()] = m.id;
-    datalistMat.innerHTML += `<option value="${m.name}">`;
-  });
+      catalogos.materials.forEach(m => {
+        mapaMateriales[m.name.toLowerCase().trim()] = m.id;
+        datalistMat.innerHTML += `<option value="${m.name}">`;
+      });
 
-  catalogos.printTypes.forEach(pt => {
-    selectPrint.innerHTML += `<option value="${pt.id}">${pt.name}</option>`;
-  });
+      catalogos.printTypes.forEach(pt => {
+        selectPrint.innerHTML += `<option value="${pt.id}">${pt.name}</option>`;
+      });
 
-  document.getElementById('modal-agregar-item').style.display = 'flex';
-}
-
-function cerrarModalItem() {
-  document.getElementById('modal-agregar-item').style.display = 'none';
-  currentOtIdParaAgregar = null;
-}
-
-async function guardarItemManual() {
-  if (!currentOtIdParaAgregar) return;
-  
-  const inputMat = document.getElementById('modal-material-input');
-  if (!inputMat) return;
-
-  const nombreIngresado = inputMat.value.trim().toLowerCase();
-  
-  // Buscar ID del material sin importar mayúsculas/minúsculas o espacios
-  let material_id = mapaMateriales[nombreIngresado];
-
-  if (!material_id) {
-    const claveEncontrada = Object.keys(mapaMateriales).find(k => k === nombreIngresado);
-    if (claveEncontrada) material_id = mapaMateriales[claveEncontrada];
-  }
-
-  if (!material_id) {
-    alert("⚠️ Por favor selecciona un material válido desplegado en la lista.");
-    return;
-  }
-
-  const print_type_id = document.getElementById('modal-print-type').value;
-  const file_name = document.getElementById('modal-filename').value.trim() || 'Diseno_Extra.cdr';
-  const width_cm = parseFloat(document.getElementById('modal-width').value) || 0;
-  const height_cm = parseFloat(document.getElementById('modal-height').value) || 0;
-  const copies = parseInt(document.getElementById('modal-copies').value) || 1;
-
-  try {
-    const res = await fetch(`/api/ordenes/${currentOtIdParaAgregar}/item`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        file_name, 
-        material_id: parseInt(material_id), 
-        print_type_id: parseInt(print_type_id), 
-        width_cm, 
-        height_cm, 
-        copies, 
-        file_url: '#' 
-      })
-    });
-
-    if (res.ok) {
-      cerrarModalItem();
-      cargarOrdenes();
-    } else {
-      const errData = await res.json();
-      alert("❌ Error al guardar el ítem: " + (errData.error || "Fallo en el servidor"));
+      document.getElementById('modal-agregar-item').style.display = 'flex';
     }
-  } catch (error) {
-    console.error("Error al guardar ítem:", error);
-    alert("❌ Error de conexión al guardar el ítem.");
-  }
-}
+
+    function cerrarModalItem() {
+      document.getElementById('modal-agregar-item').style.display = 'none';
+      currentOtIdParaAgregar = null;
+    }
+
+    async function guardarItemManual() {
+      if (!currentOtIdParaAgregar) return;
+      
+      const inputMat = document.getElementById('modal-material-input');
+      if (!inputMat) return;
+
+      const nombreIngresado = inputMat.value.trim().toLowerCase();
+      let material_id = mapaMateriales[nombreIngresado];
+
+      if (!material_id) {
+        const claveEncontrada = Object.keys(mapaMateriales).find(k => k === nombreIngresado);
+        if (claveEncontrada) material_id = mapaMateriales[claveEncontrada];
+      }
+
+      if (!material_id) {
+        alert("⚠️ Por favor selecciona un material válido desplegado en la lista.");
+        return;
+      }
+
+      const print_type_id = document.getElementById('modal-print-type').value;
+      const file_name = document.getElementById('modal-filename').value.trim() || 'Diseno_Extra.cdr';
+      const width_cm = parseFloat(document.getElementById('modal-width').value) || 0;
+      const height_cm = parseFloat(document.getElementById('modal-height').value) || 0;
+      const copies = parseInt(document.getElementById('modal-copies').value) || 1;
+
+      try {
+        const res = await fetch(`/api/ordenes/${currentOtIdParaAgregar}/item`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            file_name, 
+            material_id: parseInt(material_id), 
+            print_type_id: parseInt(print_type_id), 
+            width_cm, 
+            height_cm, 
+            copies, 
+            file_url: '#' 
+          })
+        });
+
+        if (res.ok) {
+          cerrarModalItem();
+          cargarOrdenes();
+        } else {
+          const errData = await res.json();
+          alert("❌ Error al guardar el ítem: " + (errData.error || "Fallo en el servidor"));
+        }
+      } catch (error) {
+        console.error("Error al guardar ítem:", error);
+        alert("❌ Error de conexión al guardar el ítem.");
+      }
+    }
 
     function abrirModalOrdenManual() {
       document.getElementById('manual-client-name').value = '';
