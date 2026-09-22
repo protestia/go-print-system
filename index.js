@@ -12,6 +12,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
 
+const preciosRoutes = require('./preciosRoutes');
+app.use(preciosRoutes);
+
 const ADJUNTOS_DIR = path.join(__dirname, 'adjuntos');
 if (!fs.existsSync(ADJUNTOS_DIR)) {
   fs.mkdirSync(ADJUNTOS_DIR, { recursive: true });
