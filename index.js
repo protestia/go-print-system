@@ -114,7 +114,9 @@ async function inicializarBaseDeDatos() {
   console.log('✅ Base de datos verificada y conectada correctamente.');
 } catch (err) {
   console.error('❌ Error inicializando la base de datos:', err);
-}
+} // 👈 Esta llave cierra el bloque catch
+
+} // 👈 ¡AGREGA ESTA LLAVE! (Cierra la función async function inicializarBaseDeDatos)
 
 inicializarBaseDeDatos();
 
