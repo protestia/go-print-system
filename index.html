@@ -47,12 +47,17 @@
     .card.warning { border-left: 6px solid #f97316; background: #fff8f6; }
     .card.delivered { border-left: 6px solid #10b981; background: #f8fafc; }
 
-    
     /* Estilo para Tarjeta Urgente (Fondo Naranja) */
     .card.urgent {
-      background: #ff9d4d !important; /* Fondo naranja vivo */
-      border-left: 8px solid #ee5a20 !important; /* Borde naranja rojizo oscuro */
-      box-shadow: 0 0 15px rgba(238, 108, 15, 0.651) !important; /* Resplandor naranja */
+      background: #ff9d4d !important;
+      border-left: 8px solid #ee5a20 !important;
+      box-shadow: 0 0 15px rgba(238, 108, 15, 0.65) !important;
+    }
+
+    /* Tarjeta Fijada (Borde y Resplandor Rosa del Pin) */
+    .card.pinned {
+    border-left: 8px solid #ec4899 !important; /* Borde rosa vivo */
+    box-shadow: 0 0 12px rgba(236, 72, 153, 0.35) !important; /* Resplandor rosa tenue */
     }
 
     .badge-urgent {
@@ -60,6 +65,27 @@
       color: #c2410c !important;
       border: 1px solid #f97316 !important;
       font-weight: bold;
+    }
+
+    /* Tarjeta Prioridad (Verde) */
+    .card.priority {
+      background: #48fd7f !important;
+      border-left: 8px solid #16a34a !important;
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.25) !important;
+    }
+
+    /* Botón Pin / Fijar Tarjeta */
+    .btn-pin {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      opacity: 0.5;
+      transition: 0.2s;
+    }
+    .btn-pin:hover, .btn-pin.pinned {
+      opacity: 1;
+      transform: scale(1.15);
     }
 
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
@@ -109,7 +135,9 @@
     /* Estilo Botón Flotante de Orden Manual */
     .btn-floating-add { position: fixed; bottom: 30px; right: 30px; background-color: #10b981; color: white; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 1000; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
     .btn-floating-add:hover { background-color: #059669; transform: scale(1.05); }
-</style>
+  </style>
+</head>
+<body>
 
   <!-- PANTALLA DE LOGIN -->
   <div id="login-screen">
@@ -208,17 +236,17 @@
             </div>
 
             <div style="flex: 1; min-width: 160px;">
-  <label style="font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; margin-bottom: 4px;">Método:</label>
-  <select id="caja-metodo" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.9rem;">
-    <option value="EFECTIVO">Efectivo</option>
-    <option value="TRANSFERENCIA">Transferencia / Banco</option>
-    <option value="TRANSFERENCIA_SAS">Transferencia / Banco Sas</option>
-    <option value="MERCADO_PAGO">Mercado Pago</option>
-    <option value="NARANJA_X">Naranja X</option>
-    <option value="CHEQUE">Cheque</option>
-    <option value="E_CHEQ">E-cheq</option>
-  </select>
-</div>
+              <label style="font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; margin-bottom: 4px;">Método:</label>
+              <select id="caja-metodo" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="TRANSFERENCIA">Transferencia / Banco</option>
+                <option value="TRANSFERENCIA_SAS">Transferencia / Banco Sas</option>
+                <option value="MERCADO_PAGO">Mercado Pago</option>
+                <option value="NARANJA_X">Naranja X</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="E_CHEQ">E-cheq</option>
+              </select>
+            </div>
 
             <div style="flex: 2; min-width: 220px;">
               <label style="font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; margin-bottom: 4px;">Detalle / Cliente:</label>
@@ -406,10 +434,10 @@
       if (usuarioActual) mostrarApp();
     };
 
-    // 🔄 Auto-refresh inteligente (PAUSA cuando estás en 'precios' o escribiendo)
+    // 🔄 Auto-refresh inteligente
     setInterval(() => {
       if (usuarioActual && typeof cargarOrdenes === 'function') {
-        if (seccionActual === 'precios' || seccionActual === 'caja') return; // No hacer polling de órdenes en precios o caja
+        if (seccionActual === 'precios' || seccionActual === 'caja') return;
 
         const activeTag = document.activeElement ? document.activeElement.tagName : '';
         if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
@@ -453,6 +481,48 @@
       }
     }
 
+    async function togglePin(event, otId, isPinned) {
+      if (event) event.stopPropagation();
+      try {
+        const res = await fetch(`/api/ordenes/fijar/${otId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_pinned: isPinned })
+        });
+        if (res.ok) cargarOrdenes();
+      } catch (err) {
+        console.error("Error al fijar orden:", err);
+      }
+    }
+
+    async function togglePrioridad(event, otId, isPriority) {
+      if (event) event.stopPropagation();
+      try {
+        const res = await fetch(`/api/ordenes/prioridad/${otId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_priority: isPriority })
+        });
+        if (res.ok) cargarOrdenes();
+      } catch (err) {
+        console.error("Error al cambiar prioridad:", err);
+      }
+    }
+
+    async function toggleUrgencia(event, otId, isUrgent) {
+      if (event) event.stopPropagation();
+      try {
+        const res = await fetch(`/api/ordenes/urgencia/${otId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_urgent: isUrgent })
+        });
+        if (res.ok) cargarOrdenes();
+      } catch (err) {
+        console.error("Error al cambiar urgencia:", err);
+      }
+    }
+
     function mostrarApp() {
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app-container').style.display = 'flex';
@@ -472,7 +542,7 @@
         btnImpresion.style.display = 'block';
         btnEntrega.style.display = 'block';
         btnHistorial.style.display = 'block';
-        if (btnCaja) btnCaja.style.display = 'block'; // 🟢 Habilitado para Admin y Diseño
+        if (btnCaja) btnCaja.style.display = 'block';
         if (btnFloatingManual) btnFloatingManual.style.display = 'flex';
         cargarSeccion('diseno');
       } else if (role === 'impresion') {
@@ -480,7 +550,7 @@
         btnImpresion.style.display = 'block';
         btnEntrega.style.display = 'block';
         btnHistorial.style.display = 'block';
-        if (btnCaja) btnCaja.style.display = 'none'; // 🔴 Oculto para Impresión
+        if (btnCaja) btnCaja.style.display = 'none';
         if (btnFloatingManual) btnFloatingManual.style.display = 'none';
         cargarSeccion('impresion');
       } else if (role === 'entrega') {
@@ -488,7 +558,7 @@
         btnImpresion.style.display = 'none';
         btnEntrega.style.display = 'block';
         btnHistorial.style.display = 'block';
-        if (btnCaja) btnCaja.style.display = 'none'; // 🔴 Oculto para Entrega
+        if (btnCaja) btnCaja.style.display = 'none';
         if (btnFloatingManual) btnFloatingManual.style.display = 'none';
         cargarSeccion('entrega');
       } else {
@@ -531,13 +601,11 @@
       const inputBuscar = document.getElementById('input-buscar');
       if (inputBuscar) inputBuscar.value = '';
 
-      // VISTAS CONTROL
       const containerOrdenes = document.getElementById('orders-container');
       const seccionPrecios = document.getElementById('seccion-precios');
       const seccionCaja = document.getElementById('seccion-caja');
       const inputBuscarOT = document.getElementById('input-buscar');
 
-      // Ocultar todo primero
       if (containerOrdenes) containerOrdenes.style.display = 'none';
       if (seccionPrecios) seccionPrecios.style.display = 'none';
       if (seccionCaja) seccionCaja.style.display = 'none';
@@ -598,195 +666,204 @@
     }
 
     function renderizarOrdenes(ordenes) {
-      const container = document.getElementById('orders-container');
-      container.innerHTML = '';
+  const container = document.getElementById('orders-container');
+  container.innerHTML = '';
 
-      if (!Array.isArray(ordenes) || ordenes.length === 0) {
-        container.innerHTML = '<p style="color: #64748b; font-weight: bold;">No se encontraron pedidos con ese criterio de búsqueda.</p>';
-        return;
-      }
+  if (!Array.isArray(ordenes) || ordenes.length === 0) {
+    container.innerHTML = '<p style="color: #64748b; font-weight: bold;">No se encontraron pedidos con ese criterio de búsqueda.</p>';
+    return;
+  }
 
-      ordenes.forEach(ot => {
-        let tieneMedidaFaltante = false;
-        let todosImpresos = true;
-        let todosEntregados = true;
-        let listadoItemsHTML = '';
-        let resumenMateriales = [];
-        let totalM2 = 0;
+  ordenes.forEach(ot => {
+    let tieneMedidaFaltante = false;
+    let todosImpresos = true;
+    let todosEntregados = true;
+    let listadoItemsHTML = '';
+    let resumenMateriales = [];
+    let totalM2 = 0;
 
-        if (ot.items && ot.items.length > 0) {
-          listadoItemsHTML = ot.items.map((item) => {
-            const ancho = parseFloat(item.width_cm || 0);
-            const alto = parseFloat(item.height_cm || 0);
-            const nombreMaterial = (item.material || '').toLowerCase();
-            const esUnitario = nombreMaterial.includes('fly banner') || 
-                               nombreMaterial.includes('roll up') || 
-                               nombreMaterial.includes('portabanner') || 
-                               nombreMaterial.includes('sublimado') ||
-                               nombreMaterial.includes('base cruz') ||
-                               nombreMaterial.includes('contrapeso') ||
-                               nombreMaterial.includes('cartel c');
+    if (ot.items && ot.items.length > 0) {
+      listadoItemsHTML = ot.items.map((item) => {
+        const ancho = parseFloat(item.width_cm || 0);
+        const alto = parseFloat(item.height_cm || 0);
+        const nombreMaterial = (item.material || '').toLowerCase();
+        const esUnitario = nombreMaterial.includes('fly banner') || 
+                           nombreMaterial.includes('roll up') || 
+                           nombreMaterial.includes('portabanner') || 
+                           nombreMaterial.includes('sublimado') ||
+                           nombreMaterial.includes('base cruz') ||
+                           nombreMaterial.includes('contrapeso') ||
+                           nombreMaterial.includes('cartel c');
 
-            if (!esUnitario && (ancho === 0 || alto === 0)) tieneMedidaFaltante = true;
-            if (seccionActual === 'impresion' && !item.is_printed) todosImpresos = false;
-            if (seccionActual === 'entrega' && !item.is_delivered_item) todosEntregados = false;
+        if (!esUnitario && (ancho === 0 || alto === 0)) tieneMedidaFaltante = true;
+        if (seccionActual === 'impresion' && !item.is_printed) todosImpresos = false;
+        if (seccionActual === 'entrega' && !item.is_delivered_item) todosEntregados = false;
 
-            totalM2 += esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
-            if (item.material) resumenMateriales.push(`${item.material} (${item.impresion || 'Std'})`);
-            
-            const urlFile = item.file_url || '#';
-            const esWarning = !esUnitario && (ancho === 0 || alto === 0);
-
-            if (seccionActual === 'diseno') {
-              return `
-                <div class="item-row ${esWarning ? 'warning-item' : ''}">
-                  <a href="${item.file_url && item.file_url !== '#' ? item.file_url : '#'}" target="_blank" class="btn-download" title="${item.file_name}">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                  <button onclick="editarLinkArchivo(${item.id}, '${item.file_url || ''}')" class="btn-edit" title="Editar Link (Drive, WeTransfer, etc.)">🔗</button>
-                  <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
-                  <button onclick="editarPrecioItem(${item.id}, ${item.price_per_m2 || 0})" class="btn-edit" title="Modificar Precio Unitario de Oferta">💲</button>
-                  <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
-                    📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
-                  </button>
-                  <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
-                </div>`;
-            } else if (seccionActual === 'impresion') {
-              return `
-                <div class="item-row">
-                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
-                    <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'printed', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
-                    ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
-                  </label>
-                </div>`;
-            } else if (seccionActual === 'entrega') {
-              return `
-                <div class="item-row">
-                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_delivered_item ? '#10b981' : '#64748b'};">
-                    <input type="checkbox" ${item.is_delivered_item ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'delivered', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
-                    ${item.is_delivered_item ? 'LISTO ✔️' : 'Pendiente'}
-                  </label>
-                </div>`;
-            } else {
-              return `
-                <div class="item-row">
-                  <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
-                    📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
-                  </a>
-                </div>`;
-            }
-          }).join('');
-        }
-
-        const materialesUnicos = [...new Set(resumenMateriales)].join(', ');
-
-        let botonSiguiente = '';
-        let seccionBotonesExtras = '';
-        let seccionEntregaExtra = '';
+        totalM2 += esUnitario ? (item.copies || 1) : ((ancho / 100) * (alto / 100) * (item.copies || 1));
+        if (item.material) resumenMateriales.push(`${item.material} (${item.impresion || 'Std'})`);
+        
+        const urlFile = item.file_url || '#';
+        const esWarning = !esUnitario && (ancho === 0 || alto === 0);
 
         if (seccionActual === 'diseno') {
-          const disabledAttr = tieneMedidaFaltante ? 'disabled title="Debe cargar las medidas antes de avanzar"' : '';
-          botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_PRINT')" class="btn btn-status" ${disabledAttr}>Pasar a Impresión ➔</button>`;
-          seccionBotonesExtras = `
-            <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
-            <a href="${ot.client_email ? `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(ot.client_email)}` : 'https://mail.google.com'}" target="_blank" class="btn btn-gmail">✉️ Responder Gmail Cliente</a>
-          `;
-        } else if (seccionActual === 'impresion') {
-          const disabledEntrega = !todosImpresos ? 'disabled title="Debe tildar/verificar todos los archivos antes de pasar a entrega"' : '';
-          const bgEntrega = todosImpresos ? '#0ada56' : '#cbd5e1';
-          
-          botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
-          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-        } else if (seccionActual === 'entrega' || seccionActual === 'historial') {
-          const esHistorial = seccionActual === 'historial';
-          const readonlyAttr = esHistorial ? 'readonly style="background: #f8fafc; border: none; color: #334155;"' : '';
-
-          seccionEntregaExtra += `
-            <div class="input-group">
-              <label>Entrega (Fecha Prometida):</label>
-              <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)"` : readonlyAttr} placeholder="No especificada">
-            </div>
-            <div class="input-group" style="margin-top: 10px;">
-              <label>Entregado por:</label>
-              <input type="text" class="input-custom" value="${ot.entregado_por || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)"` : readonlyAttr} placeholder="No especificado">
-            </div>
-            <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
-              <label>Fecha de Entrega:</label>
-              <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)"` : readonlyAttr} placeholder="No especificada">
+          return `
+            <div class="item-row ${esWarning ? 'warning-item' : ''}">
+              <a href="${item.file_url && item.file_url !== '#' ? item.file_url : '#'}" target="_blank" class="btn-download" title="${item.file_name}">
+                📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+              </a>
+              <button onclick="editarLinkArchivo(${item.id}, '${item.file_url || ''}')" class="btn-edit" title="Editar Link (Drive, WeTransfer, etc.)">🔗</button>
+              <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
+              <button onclick="editarPrecioItem(${item.id}, ${item.price_per_m2 || 0})" class="btn-edit" title="Modificar Precio Unitario de Oferta">💲</button>
+              <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
+                📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
+              </button>
+              <button onclick="eliminarItem(${item.id})" class="btn-delete-item" title="Eliminar ítem">❌</button>
             </div>`;
-
-          if (seccionActual === 'entrega') {
-            const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
-            const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
-
-            botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
-          }
-          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-        } else if (seccionActual === 'historial') {
-          seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+        } else if (seccionActual === 'impresion') {
+          return `
+            <div class="item-row">
+              <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
+                📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+              </a>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_printed ? '#10b981' : '#64748b'};">
+                <input type="checkbox" ${item.is_printed ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'printed', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                ${item.is_printed ? 'IMPRESO ✔️' : 'Pendiente'}
+              </label>
+            </div>`;
+        } else if (seccionActual === 'entrega') {
+          return `
+            <div class="item-row">
+              <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
+                📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+              </a>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: ${item.is_delivered_item ? '#10b981' : '#64748b'};">
+                <input type="checkbox" ${item.is_delivered_item ? 'checked' : ''} onchange="toggleItemStatus(${item.id}, 'delivered', this.checked)" style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                ${item.is_delivered_item ? 'LISTO ✔️' : 'Pendiente'}
+              </label>
+            </div>`;
+        } else {
+          return `
+            <div class="item-row">
+              <a href="${urlFile}" target="_blank" class="btn-download" style="font-weight: bold; color: #5b3693;">
+                📥 ${item.file_name} <strong>(${esUnitario ? item.copies + ' un.' : ancho + 'x' + alto + ' cm'})</strong>
+              </a>
+            </div>`;
         }
-
-        const badgeHTML = seccionActual === 'historial'
-          ? `<span class="badge badge-success">ENTREGADO ✔️</span>`
-          : (tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`);
-
-        const botonAgregarItemHTML = seccionActual === 'diseno' 
-          ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` : '';
-
-        const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
-
-        // 🔥 Estado de urgencia
-        const esUrgente = ot.is_urgent === true;
-
-        container.innerHTML += `
-          <div class="card ${esUrgente ? 'urgent' : ''} ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
-            <div class="card-header">
-              <h3 class="card-title">
-                OT #${ot.ot_numero}
-                <button onclick="editarNumeroOT(${ot.ot_numero})" class="btn-edit" title="Editar número de orden">✏️</button>
-              </h3>
-              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                ${badgeHTML}
-                <!-- Checkbox HOY URGENCIA debajo del badge -->
-                <label style="font-size: 0.75rem; font-weight: bold; color: #c2410c; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
-                  <input type="checkbox" ${esUrgente ? 'checked' : ''} onchange="toggleUrgencia(${ot.ot_numero}, this.checked)" style="accent-color: #f97316; cursor: pointer;">
-                  🔥 HOY URGENCIA
-                </label>
-              </div>
-            </div>
-            
-            <div class="data-group">
-              <span>Cliente:</span> <strong>${ot.client_name || 'Sin Especificar'}</strong>
-              ${seccionActual === 'diseno' ? `<button onclick="editarCliente(${ot.ot_numero}, '${ot.client_name || ''}')" class="btn-edit" title="Editar cliente">✏️</button>` : ''}
-              <br><span class="email-tag">(${ot.client_email})</span>
-            </div>
-
-            ${ot.notes ? `<div class="data-group" style="background: #fef3c7; padding: 6px; border-radius: 6px; margin-top: 4px; font-size: 0.85rem;"><span>📝 Notas:</span> ${ot.notes}</div>` : ''}
-
-            <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
-            <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
-            <div class="data-group"><span>Total:</span> $${Number(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
-
-            ${seccionEntregaExtra}
-
-            <div class="file-actions">
-              <span style="font-size: 0.85rem; font-weight: bold;">Adjuntos / Ítems (${ot.items ? ot.items.length : 0}):</span>
-              <div class="attachments-container">${listadoItemsHTML}</div>
-              ${botonAgregarItemHTML}
-            </div>
-
-            ${seccionBotonesExtras}
-            ${botonSiguiente}
-            ${botonEliminarOrden}
-          </div>`;
-      });
+      }).join('');
     }
+
+    const materialesUnicos = [...new Set(resumenMateriales)].join(', ');
+
+    let botonSiguiente = '';
+    let seccionBotonesExtras = '';
+    let seccionEntregaExtra = '';
+
+    if (seccionActual === 'diseno') {
+      const disabledAttr = tieneMedidaFaltante ? 'disabled title="Debe cargar las medidas antes de avanzar"' : '';
+      botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_PRINT')" class="btn btn-status" ${disabledAttr}>Pasar a Impresión ➔</button>`;
+      seccionBotonesExtras = `
+        <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>
+        <a href="${ot.client_email ? `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(ot.client_email)}` : 'https://mail.google.com'}" target="_blank" class="btn btn-gmail">✉️ Responder Gmail Cliente</a>
+      `;
+    } else if (seccionActual === 'impresion') {
+      const disabledEntrega = !todosImpresos ? 'disabled title="Debe tildar/verificar todos los archivos antes de pasar a entrega"' : '';
+      const bgEntrega = todosImpresos ? '#0ada56' : '#cbd5e1';
+      
+      botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
+      seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+    } else if (seccionActual === 'entrega' || seccionActual === 'historial') {
+      const esHistorial = seccionActual === 'historial';
+      const readonlyAttr = esHistorial ? 'readonly style="background: #f8fafc; border: none; color: #334155;"' : '';
+
+      seccionEntregaExtra += `
+        <div class="input-group">
+          <label>Entrega (Fecha Prometida):</label>
+          <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)"` : readonlyAttr} placeholder="No especificada">
+        </div>
+        <div class="input-group" style="margin-top: 10px;">
+          <label>Entregado por:</label>
+          <input type="text" class="input-custom" value="${ot.entregado_por || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)"` : readonlyAttr} placeholder="No especificado">
+        </div>
+        <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
+          <label>Fecha de Entrega:</label>
+          <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)"` : readonlyAttr} placeholder="No especificada">
+        </div>`;
+
+      if (seccionActual === 'entrega') {
+        const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
+        const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
+
+        botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
+      }
+      seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+    } else if (seccionActual === 'historial') {
+      seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
+    }
+
+    const badgeHTML = seccionActual === 'historial'
+      ? `<span class="badge badge-success">ENTREGADO ✔️</span>`
+      : (tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`);
+
+    const botonAgregarItemHTML = seccionActual === 'diseno' 
+      ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` : '';
+
+    const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
+
+    const esUrgente = ot.is_urgent === true;
+    const esFijada = ot.is_pinned === true;
+    const esPrioridad = ot.is_priority === true;
+
+    container.innerHTML += `
+      <div class="card ${esFijada ? 'pinned' : ''} ${esPrioridad ? 'priority' : (esUrgente ? 'urgent' : '')} ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
+        <div class="card-header">
+          <h3 class="card-title">
+            <button onclick="togglePin(event, ${ot.ot_numero}, ${!esFijada})" class="btn-pin ${esFijada ? 'pinned' : ''}" title="${esFijada ? 'Desfijar orden' : 'Fijar arriba'}">
+              📌
+            </button>
+            OT #${ot.ot_numero}
+            <button onclick="editarNumeroOT(${ot.ot_numero})" class="btn-edit" title="Editar número de orden">✏️</button>
+          </h3>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+            ${badgeHTML}
+            <!-- Checkbox HOY URGENCIA -->
+            <label style="font-size: 0.75rem; font-weight: bold; color: #c2410c; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+              <input type="checkbox" ${esUrgente ? 'checked' : ''} onchange="toggleUrgencia(event, ${ot.ot_numero}, this.checked)" style="accent-color: #f97316; cursor: pointer;">
+              🔥 HOY URGENCIA
+            </label>
+            <!-- Checkbox PRIORIDAD -->
+            <label style="font-size: 0.75rem; font-weight: bold; color: #15803d; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="checkbox" ${esPrioridad ? 'checked' : ''} onchange="togglePrioridad(event, ${ot.ot_numero}, this.checked)" style="accent-color: #16a34a; cursor: pointer;">
+              ⭐ PRIORIDAD
+            </label>
+          </div>
+        </div>
+        
+        <div class="data-group">
+          <span>Cliente:</span> <strong>${ot.client_name || 'Sin Especificar'}</strong>
+          ${seccionActual === 'diseno' ? `<button onclick="editarCliente(${ot.ot_numero}, '${ot.client_name || ''}')" class="btn-edit" title="Editar cliente">✏️</button>` : ''}
+          <br><span class="email-tag">(${ot.client_email})</span>
+        </div>
+
+        ${ot.notes ? `<div class="data-group" style="background: #fef3c7; padding: 6px; border-radius: 6px; margin-top: 4px; font-size: 0.85rem;"><span>📝 Notas:</span> ${ot.notes}</div>` : ''}
+
+        <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
+        <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
+        <div class="data-group"><span>Total:</span> $${Number(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
+
+        ${seccionEntregaExtra}
+
+        <div class="file-actions">
+          <span style="font-size: 0.85rem; font-weight: bold;">Adjuntos / Ítems (${ot.items ? ot.items.length : 0}):</span>
+          <div class="attachments-container">${listadoItemsHTML}</div>
+          ${botonAgregarItemHTML}
+        </div>
+
+        ${seccionBotonesExtras}
+        ${botonSiguiente}
+        ${botonEliminarOrden}
+      </div>`;
+  });
+}
 
     async function toggleItemStatus(itemId, tipo, isChecked) {
       const endpoint = tipo === 'printed' ? `/api/ordenes/item/printed/${itemId}` : `/api/ordenes/item/delivered/${itemId}`;
@@ -825,19 +902,6 @@
       } catch (err) {
         console.error("Error al editar precio:", err);
         alert("❌ Error de conexión al guardar el precio.");
-      }
-    }
-
-    async function toggleUrgencia(otId, isUrgent) {
-      try {
-        await fetch(`/api/ordenes/urgencia/${otId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_urgent: isUrgent })
-        });
-        cargarOrdenes();
-      } catch (err) {
-        console.error("Error al cambiar urgencia:", err);
       }
     }
 
@@ -1043,7 +1107,6 @@
 
     let currentDailyCashId = null;
 
-    // Cargar la caja del día y el reporte mensual al abrir la pestaña
     async function cargarCajaHoy() {
       try {
         const res = await fetch('/api/caja/hoy');
@@ -1051,7 +1114,6 @@
         
         currentDailyCashId = data.dailyCash.id;
         
-        // Actualizar montos en pantalla
         const ingresos = parseFloat(data.dailyCash.total_incomes) || 0;
         const egresos = parseFloat(data.dailyCash.total_expenses) || 0;
         const saldo = ingresos - egresos;
@@ -1060,7 +1122,6 @@
         document.getElementById('caja-total-egresos').innerText = `$${egresos.toLocaleString('es-AR')}`;
         document.getElementById('caja-saldo-neto').innerText = `$${saldo.toLocaleString('es-AR')}`;
 
-        // Deshabilitar botón si la caja ya fue cerrada
         const btnCerrar = document.getElementById('btn-cerrar-caja');
         if (data.dailyCash.status === 'CLOSED') {
           btnCerrar.disabled = true;
@@ -1072,7 +1133,6 @@
           btnCerrar.style.background = '#d9534f';
         }
 
-        // Renderizar tabla de movimientos del día
         const tbody = document.getElementById('tabla-caja-movimientos');
         tbody.innerHTML = '';
 
@@ -1097,7 +1157,6 @@
           });
         }
 
-        // 📊 Autoseleccionar Mes/Año actual y cargar reporte mensual
         const hoy = new Date();
         const selectMes = document.getElementById('caja-mes');
         const inputAnio = document.getElementById('caja-anio');
@@ -1157,7 +1216,6 @@
       }
     }
 
-    // Registrar un movimiento (Ingreso / Egreso)
     async function registrarMovimientoCaja(event) {
       event.preventDefault();
       if (!currentDailyCashId) return alert('No se pudo identificar la caja actual');
@@ -1192,7 +1250,6 @@
       }
     }
 
-    // Cerrar caja diaria
     async function cerrarCajaDiaria() {
       if (!confirm('¿Estás seguro de cerrar la caja de hoy? Una vez cerrada quedará congelada.')) return;
 
