@@ -31,7 +31,6 @@ if (!fs.existsSync(IMAGENES_DIR)) {
 app.use('/Imagenes', express.static(IMAGENES_DIR));
 
 // Inicialización automática de tablas y columnas nuevas
-// Inicialización automática de tablas y columnas nuevas
 async function inicializarBaseDeDatos() {
   try {
     await pool.query(`
@@ -76,6 +75,8 @@ async function inicializarBaseDeDatos() {
         fecha_entrega VARCHAR(100),
         notes TEXT,
         is_urgent BOOLEAN DEFAULT FALSE,
+        is_pinned BOOLEAN DEFAULT FALSE,
+        is_priority BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -106,6 +107,8 @@ async function inicializarBaseDeDatos() {
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS fecha_entrega VARCHAR(100);
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS notes TEXT;
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS is_urgent BOOLEAN DEFAULT FALSE;
+      ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE;
+      ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS is_priority BOOLEAN DEFAULT FALSE;
     `);
 
     const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
@@ -426,7 +429,8 @@ app.get('/api/ordenes/:estado', async (req, res) => {
   try {
     const query = `
       SELECT 
-        wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, wo.is_urgent,
+        wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, wo.is_urgent, 
+        wo.is_pinned, wo.is_priority,
         COALESCE((
           SELECT SUM(
             CASE 
@@ -471,8 +475,8 @@ app.get('/api/ordenes/:estado', async (req, res) => {
       LEFT JOIN print_types pt ON woi.print_type_id = pt.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
       WHERE UPPER(COALESCE(wo.status, 'PENDING_DESIGN')) = UPPER($1)
-      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes, wo.is_urgent
-      ORDER BY wo.created_at DESC;
+      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes, wo.is_urgent, wo.is_pinned, wo.is_priority
+      ORDER BY wo.is_pinned DESC, wo.created_at DESC;
     `;
     const result = await pool.query(query, [statusFilter]);
     res.json(result.rows);
@@ -500,6 +504,38 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// 📌 Endpoint para Fijar / Desfijar Orden (PIN)
+app.put('/api/ordenes/fijar/:id', async (req, res) => {
+  const { id } = req.params;
+  const { is_pinned } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE work_orders SET is_pinned = $1 WHERE id = $2 RETURNING *;`,
+      [is_pinned, id]
+    );
+    res.json({ success: true, order: result.rows[0] });
+  } catch (err) {
+    console.error('Error al fijar orden:', err);
+    res.status(500).json({ error: 'Error al fijar orden' });
+  }
+});
+
+// ⭐ Endpoint para activar / desactivar PRIORIDAD
+app.put('/api/ordenes/prioridad/:id', async (req, res) => {
+  const { id } = req.params;
+  const { is_priority } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE work_orders SET is_priority = $1 WHERE id = $2 RETURNING *;`,
+      [is_priority, id]
+    );
+    res.json({ success: true, order: result.rows[0] });
+  } catch (err) {
+    console.error('Error al actualizar prioridad:', err);
+    res.status(500).json({ error: 'Error al actualizar prioridad' });
   }
 });
 
