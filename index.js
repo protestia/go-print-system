@@ -31,6 +31,7 @@ if (!fs.existsSync(IMAGENES_DIR)) {
 app.use('/Imagenes', express.static(IMAGENES_DIR));
 
 // Inicialización automática de tablas y columnas nuevas
+// Inicialización automática de tablas y columnas nuevas
 async function inicializarBaseDeDatos() {
   try {
     await pool.query(`
@@ -74,6 +75,7 @@ async function inicializarBaseDeDatos() {
         entregado_por VARCHAR(255),
         fecha_entrega VARCHAR(100),
         notes TEXT,
+        is_urgent BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -103,23 +105,23 @@ async function inicializarBaseDeDatos() {
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS entregado_por VARCHAR(255);
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS fecha_entrega VARCHAR(100);
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS is_urgent BOOLEAN DEFAULT FALSE;
     `);
 
-  const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
-  if (adminCheck.rows.length === 0) {
-    await pool.query(
-      'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
-      ['admin', 'elcoes22', 'admin']
-    );
-    console.log('👤 Usuario administrador verificado/creado.');
+    const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
+    if (adminCheck.rows.length === 0) {
+      await pool.query(
+        'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+        ['admin', 'elcoes22', 'admin']
+      );
+      console.log('👤 Usuario administrador verificado/creado.');
+    }
+
+    console.log('✅ Base de datos verificada y conectada correctamente.');
+  } catch (err) {
+    console.error('❌ Error inicializando la base de datos:', err);
   }
-
-  console.log('✅ Base de datos verificada y conectada correctamente.');
-} catch (err) {
-  console.error('❌ Error inicializando la base de datos:', err);
-} // 👈 Esta llave cierra el bloque catch
-
-} // 👈 ¡AGREGA ESTA LLAVE! (Cierra la función async function inicializarBaseDeDatos)
+}
 
 inicializarBaseDeDatos();
 
@@ -424,7 +426,7 @@ app.get('/api/ordenes/:estado', async (req, res) => {
   try {
     const query = `
       SELECT 
-        wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, 
+        wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, wo.is_urgent,
         COALESCE((
           SELECT SUM(
             CASE 
@@ -469,7 +471,7 @@ app.get('/api/ordenes/:estado', async (req, res) => {
       LEFT JOIN print_types pt ON woi.print_type_id = pt.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
       WHERE UPPER(COALESCE(wo.status, 'PENDING_DESIGN')) = UPPER($1)
-      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes
+      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes, wo.is_urgent
       ORDER BY wo.created_at DESC;
     `;
     const result = await pool.query(query, [statusFilter]);
@@ -498,6 +500,22 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// Endpoint para marcar / desmarcar urgencia
+app.put('/api/ordenes/urgencia/:id', async (req, res) => {
+  const { id } = req.params;
+  const { is_urgent } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE work_orders SET is_urgent = $1 WHERE id = $2 RETURNING *;`,
+      [is_urgent, id]
+    );
+    res.json({ success: true, order: result.rows[0] });
+  } catch (err) {
+    console.error('Error al actualizar urgencia:', err);
+    res.status(500).json({ error: 'Error al actualizar urgencia' });
   }
 });
 
