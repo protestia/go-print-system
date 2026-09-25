@@ -469,11 +469,12 @@
             const alto = parseFloat(item.height_cm || 0);
             const nombreMaterial = (item.material || '').toLowerCase();
             const esUnitario = nombreMaterial.includes('fly banner') || 
-                               nombreMaterial.includes('roll up') || 
-                               nombreMaterial.includes('portabanner') || 
-                               nombreMaterial.includes('sublimado') ||
-                               nombreMaterial.includes('base cruz') ||
-                               nombreMaterial.includes('contrapeso');
+                   nombreMaterial.includes('roll up') || 
+                   nombreMaterial.includes('portabanner') || 
+                   nombreMaterial.includes('sublimado') ||
+                   nombreMaterial.includes('base cruz') ||
+                   nombreMaterial.includes('contrapeso') ||
+                   nombreMaterial.includes('cartel c');
 
             if (!esUnitario && (ancho === 0 || alto === 0)) tieneMedidaFaltante = true;
             if (seccionActual === 'impresion' && !item.is_printed) todosImpresos = false;
@@ -493,6 +494,7 @@
                   </a>
                   <button onclick="editarLinkArchivo(${item.id}, '${item.file_url || ''}')" class="btn-edit" title="Editar Link (Drive, WeTransfer, etc.)">🔗</button>
                   <button onclick="editarNombreArchivo(${item.id}, '${item.file_name}')" class="btn-edit" title="Editar nombre">✏️</button>
+                  <button onclick="editarPrecioItem(${item.id}, ${item.price_per_m2 || 0})" class="btn-edit" title="Modificar Precio Unitario de Oferta">💲</button>
                   <button onclick="editarMedidasItem(${item.id}, '${item.file_name}', ${ancho}, ${alto}, ${item.copies || 1})" class="btn-edit-size" title="Editar medida">
                     📏 ${esWarning ? 'Cargar Medida' : 'Editar'}
                   </button>
@@ -638,6 +640,32 @@
       body[campo] = valor;
       await fetch(`/api/ordenes/entrega-info/${otId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     }
+
+    async function editarPrecioItem(itemId, precioActual) {
+  const nuevoPrecio = prompt(
+    `🏷️ Ingrese el nuevo PRECIO UNITARIO para este ítem:\n\n(Deje el campo en blanco para restaurar el precio automático del catálogo)`, 
+    precioActual || ''
+  );
+  
+  if (nuevoPrecio === null) return; // Si cancela
+
+  try {
+    const res = await fetch(`/api/ordenes/item-precio/${itemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unit_price_override: nuevoPrecio.trim() === '' ? null : parseFloat(nuevoPrecio) })
+    });
+
+    if (res.ok) {
+      cargarOrdenes();
+    } else {
+      alert("❌ Error al guardar el precio.");
+    }
+  } catch (err) {
+    console.error("Error al editar precio:", err);
+    alert("❌ Error de conexión al guardar el precio.");
+  }
+}
 
     async function editarNumeroOT(idActual) {
       const nuevoNum = prompt("Ingresa el nuevo número de orden deseado:", idActual);
