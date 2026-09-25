@@ -47,6 +47,20 @@
     .card.warning { border-left: 6px solid #f97316; background: #fff8f6; }
     .card.delivered { border-left: 6px solid #10b981; background: #f8fafc; }
 
+    /* Estilo para Tarjeta Urgente (Fondo Naranja) */
+    .card.urgent {
+      background: #fff7ed !important;
+      border-left: 6px solid #f97316 !important;
+      box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25) !important;
+    }
+
+    .badge-urgent {
+      background: #ffedd5 !important;
+      color: #c2410c !important;
+      border: 1px solid #f97316 !important;
+      font-weight: bold;
+    }
+
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     .card-title { font-size: 1.1rem; font-weight: bold; color: #5b3693; margin: 0; display: flex; align-items: center; gap: 8px; }
     
@@ -94,9 +108,7 @@
     /* Estilo Botón Flotante de Orden Manual */
     .btn-floating-add { position: fixed; bottom: 30px; right: 30px; background-color: #10b981; color: white; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 1000; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
     .btn-floating-add:hover { background-color: #059669; transform: scale(1.05); }
-  </style>
-</head>
-<body>
+</style>
 
   <!-- PANTALLA DE LOGIN -->
   <div id="login-screen">
@@ -728,14 +740,24 @@
 
         const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
 
+        // 🔥 Estado de urgencia
+        const esUrgente = ot.is_urgent === true;
+
         container.innerHTML += `
-          <div class="card ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
+          <div class="card ${esUrgente ? 'urgent' : ''} ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
             <div class="card-header">
               <h3 class="card-title">
                 OT #${ot.ot_numero}
                 <button onclick="editarNumeroOT(${ot.ot_numero})" class="btn-edit" title="Editar número de orden">✏️</button>
               </h3>
-              ${badgeHTML}
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                ${badgeHTML}
+                <!-- Checkbox HOY URGENCIA debajo del badge -->
+                <label style="font-size: 0.75rem; font-weight: bold; color: #c2410c; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                  <input type="checkbox" ${esUrgente ? 'checked' : ''} onchange="toggleUrgencia(${ot.ot_numero}, this.checked)" style="accent-color: #f97316; cursor: pointer;">
+                  🔥 HOY URGENCIA
+                </label>
+              </div>
             </div>
             
             <div class="data-group">
@@ -802,6 +824,19 @@
       } catch (err) {
         console.error("Error al editar precio:", err);
         alert("❌ Error de conexión al guardar el precio.");
+      }
+    }
+
+    async function toggleUrgencia(otId, isUrgent) {
+      try {
+        await fetch(`/api/ordenes/urgencia/${otId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_urgent: isUrgent })
+        });
+        cargarOrdenes();
+      } catch (err) {
+        console.error("Error al cambiar urgencia:", err);
       }
     }
 
