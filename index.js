@@ -15,6 +15,9 @@ app.use(express.static('.'));
 const preciosRoutes = require('./preciosRoutes');
 app.use(preciosRoutes);
 
+const cajaRoutes = require('./caja')(pool);
+app.use('/api/caja', cajaRoutes);
+
 const ADJUNTOS_DIR = path.join(__dirname, 'adjuntos');
 if (!fs.existsSync(ADJUNTOS_DIR)) {
   fs.mkdirSync(ADJUNTOS_DIR, { recursive: true });
@@ -422,10 +425,17 @@ app.get('/api/ordenes/:estado', async (req, res) => {
     const query = `
       SELECT 
         wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, 
-        COALESCE(NULLIF(wo.total_price, 0), (
+        COALESCE((
           SELECT SUM(
             CASE 
-              WHEN m.name ILIKE '%fly banner%' OR m.name ILIKE '%sublimado%' OR m.name ILIKE '%portabanner%' OR m.name ILIKE '%cartel c%'
+              WHEN m.name ILIKE '%fly banner%' 
+                OR m.name ILIKE '%roll up%' 
+                OR m.name ILIKE '%portabanner%' 
+                OR m.name ILIKE '%sublimado%' 
+                OR m.name ILIKE '%base cruz%' 
+                OR m.name ILIKE '%cruz%' 
+                OR m.name ILIKE '%contrapeso%' 
+                OR m.name ILIKE '%cartel c%'
               THEN woi.copies * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
               ELSE woi.area_m2 * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
             END
@@ -517,19 +527,48 @@ app.put('/api/ordenes/item-nombre/:id', async (req, res) => {
 app.put('/api/ordenes/item/:id', async (req, res) => {
   const { id } = req.params;
   const { width_cm, height_cm, copies } = req.body;
+  
   try {
-    const itemRes = await pool.query(`SELECT woi.*, m.name AS material_name FROM work_order_items woi LEFT JOIN materials m ON woi.material_id = m.id WHERE woi.id = $1;`, [id]);
+    const itemRes = await pool.query(
+      `SELECT woi.*, m.name AS material_name 
+       FROM work_order_items woi 
+       LEFT JOIN materials m ON woi.material_id = m.id 
+       WHERE woi.id = $1;`, 
+      [id]
+    );
+
     if (itemRes.rows.length === 0) return res.status(404).json({ error: 'No encontrado' });
+    
     const item = itemRes.rows[0];
-    const esUnitario = (item.material_name || '').toLowerCase().includes('fly banner');
+    const matLower = (item.material_name || '').toLowerCase().trim();
 
-    let area_m2 = esUnitario ? copies : ((width_cm / 100) * (height_cm / 100)) * copies;
+    // Verificación de todos los productos por UNIDAD
+    const esUnitario = matLower.includes('fly banner') || 
+                       matLower.includes('roll up') || 
+                       matLower.includes('portabanner') || 
+                       matLower.includes('sublimado') ||
+                       matLower.includes('base cruz') ||
+                       matLower.includes('cruz') ||
+                       matLower.includes('contrapeso') ||
+                       matLower.includes('cartel c');
 
-    await pool.query(`UPDATE work_order_items SET width_cm = $1, height_cm = $2, copies = $3, area_m2 = $4 WHERE id = $5;`, 
-      [esUnitario ? 0 : width_cm, esUnitario ? 0 : height_cm, copies, area_m2.toFixed(2), id]);
+    const cantCopias = parseInt(copies || 1);
+    const anchoNum = parseFloat(width_cm || 0);
+    const altoNum = parseFloat(height_cm || 0);
+
+    let area_m2 = esUnitario ? cantCopias : ((anchoNum / 100) * (altoNum / 100)) * cantCopias;
+
+    await pool.query(
+      `UPDATE work_order_items 
+       SET width_cm = $1, height_cm = $2, copies = $3, area_m2 = $4 
+       WHERE id = $5;`, 
+      [esUnitario ? 0 : anchoNum, esUnitario ? 0 : altoNum, cantCopias, area_m2.toFixed(2), id]
+    );
 
     const allItems = await pool.query(`
-      SELECT woi.*, COALESCE(woi.unit_price_override, pr.price_per_m2, 0) AS price_per_m2, m.name AS material_name 
+      SELECT woi.*, 
+             COALESCE(woi.unit_price_override, pr.price_per_m2, 0) AS price_per_m2, 
+             m.name AS material_name 
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
@@ -539,11 +578,22 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
     let grandTotal = 0;
     allItems.rows.forEach(it => {
       const pM2 = parseFloat(it.price_per_m2 || 0);
-      const isU = (it.material_name || '').toLowerCase().includes('fly banner');
-      grandTotal += isU ? (it.copies * pM2) : (parseFloat(it.area_m2 || 0) * pM2);
+      const itMatLower = (it.material_name || '').toLowerCase().trim();
+
+      const isU = itMatLower.includes('fly banner') || 
+                  itMatLower.includes('roll up') || 
+                  itMatLower.includes('portabanner') || 
+                  itMatLower.includes('sublimado') ||
+                  itMatLower.includes('base cruz') ||
+                  itMatLower.includes('cruz') ||
+                  itMatLower.includes('contrapeso') ||
+                  itMatLower.includes('cartel c');
+
+      grandTotal += isU ? (parseInt(it.copies || 1) * pM2) : (parseFloat(it.area_m2 || 0) * pM2);
     });
 
     await pool.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [grandTotal.toFixed(2), item.work_order_id]);
+    
     res.json({ message: 'Actualizado' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -601,9 +651,30 @@ app.put('/api/ordenes/item-precio/:id', async (req, res) => {
       let grandTotal = 0;
       allItems.rows.forEach(it => {
         const pM2 = parseFloat(it.final_unit_price || 0);
-        const matLower = (it.material_name || '').toLowerCase();
-        const isU = matLower.includes('fly banner') || matLower.includes('portabanner') || matLower.includes('sublimado');
-        grandTotal += isU ? (it.copies * pM2) : (parseFloat(it.area_m2 || 0) * pM2);
+        const matLower = (it.material_name || '').toLowerCase().trim();
+        const copies = parseInt(it.copies || 1);
+
+        // Verificação abrangente de todos os produtos por UNIDADE
+        const isU = matLower.includes('fly banner') || 
+                    matLower.includes('roll up') || 
+                    matLower.includes('portabanner') || 
+                    matLower.includes('sublimado') ||
+                    matLower.includes('base cruz') ||
+                    matLower.includes('cruz') ||
+                    matLower.includes('contrapeso') ||
+                    matLower.includes('cartel c');
+
+        if (isU) {
+          // Cobrança estritamente por unidade
+          grandTotal += copies * pM2;
+        } else {
+          // Cobrança por m²
+          const ancho = parseFloat(it.width_cm || 0) / 100;
+          const alto = parseFloat(it.height_cm || 0) / 100;
+          const area = (ancho * alto) || parseFloat(it.area_m2 || 0);
+          
+          grandTotal += area * pM2 * copies;
+        }
       });
 
       await pool.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [grandTotal.toFixed(2), work_order_id]);
