@@ -442,6 +442,7 @@ app.get('/api/ordenes/:estado', async (req, res) => {
                 OR m.name ILIKE '%cruz%' 
                 OR m.name ILIKE '%contrapeso%' 
                 OR m.name ILIKE '%cartel c%'
+                OR m.name ILIKE '%polyfam%'
               THEN woi.copies * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
               ELSE woi.area_m2 * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
             END
@@ -905,12 +906,13 @@ app.get('/ot/:id', async (req, res) => {
       }
 
       const matLower = item.material_name.toLowerCase();
-  const esUnitario = matLower.includes('fly banner') || 
-                     matLower.includes('sublimado') || 
-                     matLower.includes('base cruz') || 
-                     matLower.includes('contrapeso') ||
-                     matLower.includes('portabanner') ||
-                     matLower.includes('cartel c');
+const esUnitario = matLower.includes('fly banner') || 
+                   matLower.includes('sublimado') || 
+                   matLower.includes('base cruz') || 
+                   matLower.includes('contrapeso') ||
+                   matLower.includes('portabanner') ||
+                   matLower.includes('cartel c') ||
+                   matLower.includes('polyfam'); // 👈 AGREGAR POLYFAM AQUÍ
                      
       
       grupos[key].esUnitarioFijo = esUnitario;
