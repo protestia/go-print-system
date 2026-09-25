@@ -34,7 +34,9 @@ function renderizarTablaPrecios(materiales) {
                        nombreMatLower.includes('sublimado') ||
                        nombreMatLower.includes('base cruz') ||
                        nombreMatLower.includes('contrapeso') ||
-                       nombreMatLower.includes('roll up');
+                       nombreMatLower.includes('roll up') ||
+                       nombreMatLower.includes('cartel c') ||
+                       nombreMatLower.includes('polyfam'); // 👈 AGREGADO AQUÍ
 
     // Badge inteligente según el tipo de producto
     let tipoCobro = '';
