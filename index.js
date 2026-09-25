@@ -27,7 +27,7 @@ if (!fs.existsSync(IMAGENES_DIR)) {
 }
 app.use('/Imagenes', express.static(IMAGENES_DIR));
 
-// Inicialización automática de tablas y columnas nuevas para Entrega y Notas
+// Inicialización automática de tablas y columnas nuevas
 async function inicializarBaseDeDatos() {
   try {
     await pool.query(`
@@ -86,14 +86,16 @@ async function inicializarBaseDeDatos() {
         area_m2 NUMERIC(10,2) DEFAULT 0,
         file_url TEXT,
         is_printed BOOLEAN DEFAULT FALSE,
-        is_delivered_item BOOLEAN DEFAULT FALSE
+        is_delivered_item BOOLEAN DEFAULT FALSE,
+        unit_price_override NUMERIC(10,2) DEFAULT NULL
       );
     `);
 
-    // Añadir columnas de forma segura si la tabla ya existía
+    // Columnas adicionales de forma segura
     await pool.query(`
       ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS is_printed BOOLEAN DEFAULT FALSE;
       ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS is_delivered_item BOOLEAN DEFAULT FALSE;
+      ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS unit_price_override NUMERIC(10,2) DEFAULT NULL;
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS fecha_prometida VARCHAR(100);
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS entregado_por VARCHAR(255);
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS fecha_entrega VARCHAR(100);
@@ -213,18 +215,6 @@ async function descargarAdjuntosGmail(gmail, messageId, emailBody, emailHtmlBody
   }
   return archivosGuardados;
 }
-
-async function editarLinkArchivo(itemId, urlActual) {
-      const nuevoLink = prompt("Pega aquí cualquier link (Google Drive, WeTransfer, Imagen JPG/PNG, etc.):", urlActual === '#' ? '' : urlActual);
-      if (nuevoLink === null) return;
-
-      await fetch(`/api/ordenes/item-url/${itemId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_url: nuevoLink.trim() || '#' })
-      });
-      cargarOrdenes();
-    }
 
 async function extraerDatosOrdenConIA(emailSubject, emailBody, attachmentNames, listaMaterialesValidos, listaPrintTypesValidos) {
   const prompt = `
@@ -350,8 +340,10 @@ async function procesarTextoConIA(emailSender, emailBody, emailId, emailSubject,
       }
     }
 
-    let esUnitario = materialBuscado.toLowerCase().includes('fly banner') || materialBuscado.toLowerCase().includes('portabanner');
-    if (is_linear_db) width = 100;
+   let esUnitario = materialBuscado.toLowerCase().includes('fly banner') || 
+                 materialBuscado.toLowerCase().includes('portabanner') ||
+                 materialBuscado.toLowerCase().includes('cartel c');
+if (is_linear_db) width = 100;
 
     let itemTotalPrice = 0, itemAreaOrMeters = 0;
     if (esUnitario) {
@@ -432,9 +424,9 @@ app.get('/api/ordenes/:estado', async (req, res) => {
         COALESCE(NULLIF(wo.total_price, 0), (
           SELECT SUM(
             CASE 
-              WHEN m.name ILIKE '%fly banner%' OR m.name ILIKE '%sublimado%' OR m.name ILIKE '%portabanner%' 
-              THEN woi.copies * COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
-              ELSE woi.area_m2 * COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
+              WHEN m.name ILIKE '%fly banner%' OR m.name ILIKE '%sublimado%' OR m.name ILIKE '%portabanner%' OR m.name ILIKE '%cartel c%'
+              THEN woi.copies * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
+              ELSE woi.area_m2 * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
             END
           ) FROM work_order_items woi 
           LEFT JOIN materials m ON woi.material_id = m.id
@@ -456,7 +448,7 @@ app.get('/api/ordenes/:estado', async (req, res) => {
               'file_url', woi.file_url,
               'is_printed', woi.is_printed,
               'is_delivered_item', woi.is_delivered_item,
-              'price_per_m2', COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
+              'price_per_m2', COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
             )
           ) FILTER (WHERE woi.id IS NOT NULL), '[]'
         ) AS items
@@ -498,7 +490,6 @@ app.put('/api/ordenes/numero/:id', async (req, res) => {
   }
 });
 
-// 🔗 Endpoint para actualizar el link personalizado del ítem
 app.put('/api/ordenes/item-url/:id', async (req, res) => {
   const { id } = req.params;
   const { file_url } = req.body;
@@ -537,7 +528,7 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
       [esUnitario ? 0 : width_cm, esUnitario ? 0 : height_cm, copies, area_m2.toFixed(2), id]);
 
     const allItems = await pool.query(`
-      SELECT woi.*, COALESCE(pr.price_per_m2, 0) AS price_per_m2, m.name AS material_name 
+      SELECT woi.*, COALESCE(woi.unit_price_override, pr.price_per_m2, 0) AS price_per_m2, m.name AS material_name 
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
@@ -577,6 +568,50 @@ app.put('/api/ordenes/item/delivered/:id', async (req, res) => {
     res.json({ success: true, item: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: 'Error al actualizar ítem' });
+  }
+});
+
+// Guardar o resetear precio personalizado por ítem
+app.put('/api/ordenes/item-precio/:id', async (req, res) => {
+  const { id } = req.params;
+  const { unit_price_override } = req.body;
+
+  try {
+    const overrideVal = (unit_price_override !== null && unit_price_override !== '' && !isNaN(unit_price_override)) 
+      ? parseFloat(unit_price_override) 
+      : null;
+
+    await pool.query(`UPDATE work_order_items SET unit_price_override = $1 WHERE id = $2;`, [overrideVal, id]);
+
+    const itemRes = await pool.query(`SELECT work_order_id FROM work_order_items WHERE id = $1;`, [id]);
+    if (itemRes.rows.length > 0) {
+      const work_order_id = itemRes.rows[0].work_order_id;
+      
+      const allItems = await pool.query(`
+        SELECT woi.*, 
+               COALESCE(woi.unit_price_override, pr.price_per_m2, 0) AS final_unit_price, 
+               m.name AS material_name 
+        FROM work_order_items woi
+        LEFT JOIN materials m ON woi.material_id = m.id
+        LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
+        WHERE woi.work_order_id = $1;
+      `, [work_order_id]);
+
+      let grandTotal = 0;
+      allItems.rows.forEach(it => {
+        const pM2 = parseFloat(it.final_unit_price || 0);
+        const matLower = (it.material_name || '').toLowerCase();
+        const isU = matLower.includes('fly banner') || matLower.includes('portabanner') || matLower.includes('sublimado');
+        grandTotal += isU ? (it.copies * pM2) : (parseFloat(it.area_m2 || 0) * pM2);
+      });
+
+      await pool.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [grandTotal.toFixed(2), work_order_id]);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error al actualizar precio unitario:', err);
+    res.status(500).json({ error: 'Error al actualizar el precio en la base de datos' });
   }
 });
 
@@ -696,6 +731,7 @@ app.put('/api/ordenes/cliente/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// Comprobante de Orden de Trabajo (PDF/HTML)
 app.get('/ot/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -718,7 +754,8 @@ app.get('/ot/:id', async (req, res) => {
         woi.*, 
         COALESCE(m.name, 'Material General') AS material_name, 
         COALESCE(pt.name, 'Estándar') AS print_type_name,
-        COALESCE(pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS price_per_m2
+        COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS price_per_m2,
+        (woi.unit_price_override IS NOT NULL) AS es_precio_manual
       FROM work_order_items woi
       LEFT JOIN materials m ON woi.material_id = m.id
       LEFT JOIN print_types pt ON woi.print_type_id = pt.id
@@ -742,11 +779,13 @@ app.get('/ot/:id', async (req, res) => {
       }
 
       const matLower = item.material_name.toLowerCase();
-      const esUnitario = matLower.includes('fly banner') || 
-                         matLower.includes('sublimado') || 
-                         matLower.includes('base cruz') || 
-                         matLower.includes('contrapeso') ||
-                         matLower.includes('portabanner');
+  const esUnitario = matLower.includes('fly banner') || 
+                     matLower.includes('sublimado') || 
+                     matLower.includes('base cruz') || 
+                     matLower.includes('contrapeso') ||
+                     matLower.includes('portabanner') ||
+                     matLower.includes('cartel c');
+                     
       
       grupos[key].esUnitarioFijo = esUnitario;
 
