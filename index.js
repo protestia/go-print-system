@@ -103,13 +103,12 @@ async function inicializarBaseDeDatos() {
     `);
 
     const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
-    if (adminCheck.rows.length === 0) {
-      await pool.query(
-        'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
-        ['admin', 'admin123', 'admin']
-      );
-      console.log('👤 Usuario administrador creado por defecto (admin / admin123).');
-    }
+if (adminCheck.rows.length === 0) {
+  await pool.query(
+    'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+    ['admin', 'elcoes22', 'admin'] // 👈 Cambiado a tu contraseña segura
+  );
+  console.log('👤 Usuario administrador verificado/creado.');
 
     console.log('✅ Base de datos verificada y conectada correctamente.');
   } catch (err) {
