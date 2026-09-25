@@ -102,19 +102,16 @@ async function inicializarBaseDeDatos() {
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS notes TEXT;
     `);
 
-    const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
+   const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
 if (adminCheck.rows.length === 0) {
   await pool.query(
     'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
-    ['admin', 'elcoes22', 'admin'] // 👈 Cambiado a tu contraseña segura
+    ['admin', 'elcoes22', 'admin']
   );
   console.log('👤 Usuario administrador verificado/creado.');
+} // 👈 ¡AQUÍ FALTABA ESTA LLAVE DE CIERRE DEL IF!
 
-    console.log('✅ Base de datos verificada y conectada correctamente.');
-  } catch (err) {
-    console.error('❌ Error inicializando la base de datos:', err);
-  }
-}
+console.log('✅ Base de datos verificada y conectada correctamente.');
 
 inicializarBaseDeDatos();
 
