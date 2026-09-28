@@ -434,15 +434,14 @@ app.get('/api/ordenes/:estado', async (req, res) => {
         COALESCE((
           SELECT SUM(
             CASE 
-              WHEN m.name ILIKE '%fly banner%' 
-                OR m.name ILIKE '%roll up%' 
-                OR m.name ILIKE '%portabanner%' 
-                OR m.name ILIKE '%sublimado%' 
-                OR m.name ILIKE '%base cruz%' 
-                OR m.name ILIKE '%cruz%' 
-                OR m.name ILIKE '%contrapeso%' 
-                OR m.name ILIKE '%cartel c%'
-                OR m.name ILIKE '%polyfam%'
+           WHEN m.name ILIKE '%fly banner%' 
+            OR m.name ILIKE '%roll up%' 
+            OR m.name ILIKE '%portabanner%' 
+            OR m.name ILIKE '%base cruz%' 
+            OR m.name ILIKE '%cruz%' 
+            OR m.name ILIKE '%contrapeso%' 
+            OR m.name ILIKE '%cartel c%'
+            OR m.name ILIKE '%polyfam%'
               THEN woi.copies * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
               ELSE woi.area_m2 * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
             END
@@ -598,14 +597,14 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
     const matLower = (item.material_name || '').toLowerCase().trim();
 
     // Verificación de todos los productos por UNIDAD
-    const esUnitario = matLower.includes('fly banner') || 
-                       matLower.includes('roll up') || 
-                       matLower.includes('portabanner') || 
-                       matLower.includes('sublimado') ||
-                       matLower.includes('base cruz') ||
-                       matLower.includes('cruz') ||
-                       matLower.includes('contrapeso') ||
-                       matLower.includes('cartel c');
+const esUnitario = matLower.includes('fly banner') || 
+                   matLower.includes('roll up') || 
+                   matLower.includes('portabanner') || 
+                   matLower.includes('base cruz') || 
+                   matLower.includes('cruz') || 
+                   matLower.includes('contrapeso') || 
+                   matLower.includes('cartel c') ||
+                   matLower.includes('polyfam');
 
     const cantCopias = parseInt(copies || 1);
     const anchoNum = parseFloat(width_cm || 0);
@@ -631,18 +630,18 @@ app.put('/api/ordenes/item/:id', async (req, res) => {
     `, [item.work_order_id]);
 
     let grandTotal = 0;
-    allItems.rows.forEach(it => {
-      const pM2 = parseFloat(it.price_per_m2 || 0);
-      const itMatLower = (it.material_name || '').toLowerCase().trim();
+allItems.rows.forEach(it => {
+  const pM2 = parseFloat(it.price_per_m2 || 0);
+  const itMatLower = (it.material_name || '').toLowerCase().trim();
 
-      const isU = itMatLower.includes('fly banner') || 
-                  itMatLower.includes('roll up') || 
-                  itMatLower.includes('portabanner') || 
-                  itMatLower.includes('sublimado') ||
-                  itMatLower.includes('base cruz') ||
-                  itMatLower.includes('cruz') ||
-                  itMatLower.includes('contrapeso') ||
-                  itMatLower.includes('cartel c');
+  const isU = itMatLower.includes('fly banner') || 
+              itMatLower.includes('roll up') || 
+              itMatLower.includes('portabanner') || 
+              itMatLower.includes('base cruz') || 
+              itMatLower.includes('cruz') || 
+              itMatLower.includes('contrapeso') || 
+              itMatLower.includes('cartel c') ||
+              itMatLower.includes('polyfam');
 
       grandTotal += isU ? (parseInt(it.copies || 1) * pM2) : (parseFloat(it.area_m2 || 0) * pM2);
     });
@@ -704,20 +703,20 @@ app.put('/api/ordenes/item-precio/:id', async (req, res) => {
       `, [work_order_id]);
 
       let grandTotal = 0;
-      allItems.rows.forEach(it => {
-        const pM2 = parseFloat(it.final_unit_price || 0);
-        const matLower = (it.material_name || '').toLowerCase().trim();
-        const copies = parseInt(it.copies || 1);
+allItems.rows.forEach(it => {
+  const pM2 = parseFloat(it.final_unit_price || 0);
+  const matLower = (it.material_name || '').toLowerCase().trim();
+  const copies = parseInt(it.copies || 1);
 
-        // Verificação abrangente de todos os produtos por UNIDADE
-        const isU = matLower.includes('fly banner') || 
-                    matLower.includes('roll up') || 
-                    matLower.includes('portabanner') || 
-                    matLower.includes('sublimado') ||
-                    matLower.includes('base cruz') ||
-                    matLower.includes('cruz') ||
-                    matLower.includes('contrapeso') ||
-                    matLower.includes('cartel c');
+  // Verificación de todos los productos por UNIDAD
+  const isU = matLower.includes('fly banner') || 
+              matLower.includes('roll up') || 
+              matLower.includes('portabanner') || 
+              matLower.includes('base cruz') || 
+              matLower.includes('cruz') || 
+              matLower.includes('contrapeso') || 
+              matLower.includes('cartel c') ||
+              matLower.includes('polyfam');
 
         if (isU) {
           // Cobrança estritamente por unidade
@@ -907,12 +906,12 @@ app.get('/ot/:id', async (req, res) => {
 
       const matLower = item.material_name.toLowerCase();
 const esUnitario = matLower.includes('fly banner') || 
-                   matLower.includes('sublimado') || 
                    matLower.includes('base cruz') || 
                    matLower.includes('contrapeso') ||
                    matLower.includes('portabanner') ||
+                   matLower.includes('roll up') ||
                    matLower.includes('cartel c') ||
-                   matLower.includes('polyfam'); // 👈 AGREGAR POLYFAM AQUÍ
+                   matLower.includes('polyfam');
                      
       
       grupos[key].esUnitarioFijo = esUnitario;
