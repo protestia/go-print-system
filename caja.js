@@ -1,26 +1,61 @@
 const express = require('express');
 const router = express.Router();
 
-// Exportamos una función que recibe el 'pool' de la base de datos
 module.exports = (pool) => {
 
   // GET: Obtener movimientos y estado de la caja de hoy
   router.get('/hoy', async (req, res) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // 🔒 AUTO-CIERRE: Cerrar automáticamente cajas de días anteriores que quedaron abiertas
+      await pool.query(
+        `UPDATE daily_cash 
+         SET status = 'CLOSED', closed_at = NOW() 
+         WHERE status = 'OPEN' AND cash_date::date < CURRENT_DATE`
+      );
+
+      // Fecha local (YYYY-MM-DD)
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const today = `${year}-${month}-${day}`;
       
-      let cashRes = await pool.query('SELECT * FROM daily_cash WHERE cash_date = $1', [today]);
+      let cashRes = await pool.query('SELECT * FROM daily_cash WHERE cash_date::text LIKE $1', [`${today}%`]);
       if (cashRes.rows.length === 0) {
         cashRes = await pool.query(
-          'INSERT INTO daily_cash (cash_date) VALUES ($1) RETURNING *',
+          "INSERT INTO daily_cash (cash_date, total_incomes, total_expenses, closing_balance, status) VALUES ($1, 0, 0, 0, 'OPEN') RETURNING *",
           [today]
         );
       }
-      const dailyCash = cashRes.rows[0];
+      let dailyCash = cashRes.rows[0];
 
+      // Traer movimientos filtrando por el ID de la caja O por la fecha de hoy
       const movementsRes = await pool.query(
-        'SELECT * FROM cash_movements WHERE daily_cash_id = $1 ORDER BY created_at DESC',
-        [dailyCash.id]
+        `SELECT * FROM cash_movements 
+         WHERE daily_cash_id = $1 OR created_at::date = $2::date 
+         ORDER BY created_at DESC`,
+        [dailyCash.id, today]
+      );
+
+      // Recalcular en vivo los totales de Ingresos y Egresos
+      let calculatedIncomes = 0;
+      let calculatedExpenses = 0;
+
+      movementsRes.rows.forEach(m => {
+        const amount = parseFloat(m.amount || 0);
+        if (m.type === 'INCOME' || m.type === 'INGRESO') {
+          calculatedIncomes += amount;
+        } else if (m.type === 'EXPENSE' || m.type === 'EGRESO') {
+          calculatedExpenses += amount;
+        }
+      });
+
+      dailyCash.total_incomes = calculatedIncomes;
+      dailyCash.total_expenses = calculatedExpenses;
+
+      await pool.query(
+        'UPDATE daily_cash SET total_incomes = $1, total_expenses = $2 WHERE id = $3',
+        [calculatedIncomes, calculatedExpenses, dailyCash.id]
       );
 
       res.json({
@@ -33,18 +68,46 @@ module.exports = (pool) => {
     }
   });
 
-  // POST: Cargar un movimiento (Ingreso o Egreso)
+  // GET: Obtener movimientos y totales de una caja especifica por ID (Histórica / Cerrada)
+  router.get('/detalle/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const cashRes = await pool.query('SELECT * FROM daily_cash WHERE id = $1', [id]);
+      if (cashRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Caja no encontrada' });
+      }
+      const dailyCash = cashRes.rows[0];
+
+      const movementsRes = await pool.query(
+        `SELECT * FROM cash_movements 
+         WHERE daily_cash_id = $1 OR created_at::date = $2::date 
+         ORDER BY created_at ASC`,
+        [dailyCash.id, dailyCash.cash_date]
+      );
+
+      res.json({
+        dailyCash,
+        movements: movementsRes.rows
+      });
+    } catch (err) {
+      console.error('Error al obtener detalle de la caja:', err);
+      res.status(500).json({ error: 'Error al obtener detalle de la caja' });
+    }
+  });
+
+  // POST: Cargar un movimiento manual (Ingreso o Egreso)
   router.post('/movimiento', async (req, res) => {
     try {
       const { daily_cash_id, type, amount, payment_method, description } = req.body;
       
       const newMov = await pool.query(
-        `INSERT INTO cash_movements (daily_cash_id, type, amount, payment_method, description) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        `INSERT INTO cash_movements (daily_cash_id, type, amount, payment_method, description, created_at) 
+         VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
         [daily_cash_id, type, amount, payment_method, description]
       );
 
-      if (type === 'INCOME') {
+      if (type === 'INCOME' || type === 'INGRESO') {
         await pool.query('UPDATE daily_cash SET total_incomes = total_incomes + $1 WHERE id = $2', [amount, daily_cash_id]);
       } else {
         await pool.query('UPDATE daily_cash SET total_expenses = total_expenses + $1 WHERE id = $2', [amount, daily_cash_id]);
@@ -82,13 +145,13 @@ module.exports = (pool) => {
     }
   });
 
-  // GET: Resumen Mensual
+  // GET: Resumen Mensual (Incluye 'id' para poder consultar el detalle)
   router.get('/mensual/:anio/:mes', async (req, res) => {
     try {
       const { anio, mes } = req.params;
       const query = `
         SELECT 
-          cash_date, total_incomes, total_expenses, closing_balance, status 
+          id, cash_date, total_incomes, total_expenses, closing_balance, status 
         FROM daily_cash 
         WHERE EXTRACT(YEAR FROM cash_date) = $1 AND EXTRACT(MONTH FROM cash_date) = $2
         ORDER BY cash_date ASC
