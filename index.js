@@ -1203,17 +1203,14 @@ app.post('/api/clientes/pagos', async (req, res) => {
   }
 
   try {
-    // 1. Guardar el pago en la cuenta del cliente
-    const pagoRes = await pool.query(
+    // 1. Guardar el pago en la cuenta corriente del cliente
+    await pool.query(
       `INSERT INTO client_payments (client_id, work_order_id, amount, payment_method, notes, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW()) 
-       RETURNING id`,
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
       [clienteId, ordenId, montoVal, metodoPago, notasText]
     );
 
-    const pagoId = pagoRes.rows[0].id;
-
-    // 2. Registrar AUTOMÁTICAMENTE en la Caja Diaria vinculando el client_payment_id
+    // 2. Registrar AUTOMÁTICAMENTE en la Caja Diaria
     try {
       const clienteRes = await pool.query('SELECT name, company FROM clients WHERE id = $1', [clienteId]);
       const clientObj = clienteRes.rows[0] || {};
@@ -1225,20 +1222,30 @@ app.post('/api/clientes/pagos', async (req, res) => {
         ? `Cobro OT #${ordenId} - ${nombreCliente}` 
         : `Pago a cuenta - ${nombreCliente}`;
 
-      // Obtener ID de la caja abierta hoy
-      const cajaRes = await pool.query(
+      // Obtener caja abierta hoy o crearla automáticamente si estaba cerrada
+      let cajaRes = await pool.query(
         `SELECT id FROM daily_cash WHERE status = 'OPEN' ORDER BY id DESC LIMIT 1`
       );
-      const dailyCashId = cajaRes.rows[0]?.id || null;
+      
+      let dailyCashId;
+      if (cajaRes.rows.length === 0) {
+        const nuevaCaja = await pool.query(
+          `INSERT INTO daily_cash (cash_date, total_incomes, total_expenses, closing_balance, status) 
+           VALUES (CURRENT_DATE, 0, 0, 0, 'OPEN') RETURNING id`
+        );
+        dailyCashId = nuevaCaja.rows[0].id;
+      } else {
+        dailyCashId = cajaRes.rows[0].id;
+      }
 
-      // Insertar en cash_movements enlazando el ID del pago
+      // Insertar en cash_movements usando SOLO las columnas que existen en tu DB
       await pool.query(
-        `INSERT INTO cash_movements (daily_cash_id, client_payment_id, type, amount, payment_method, description, created_at)
-         VALUES ($1, $2, 'INCOME', $3, $4, $5, NOW())`,
-        [dailyCashId, pagoId, montoVal, metodoPago, detalleCaja]
+        `INSERT INTO cash_movements (daily_cash_id, type, amount, payment_method, description, created_at)
+         VALUES ($1, 'INCOME', $2, $3, $4, NOW())`,
+        [dailyCashId, montoVal, metodoPago, detalleCaja]
       );
 
-      console.log('✅ Ingreso registrado con éxito en la caja diaria (vínculo creado)');
+      console.log('✅ Ingreso registrado con éxito en la caja diaria');
 
     } catch (errCaja) {
       console.error('❌ Error al intentar registrar en la caja:', errCaja.message);
