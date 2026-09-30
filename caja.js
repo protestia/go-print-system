@@ -3,7 +3,7 @@ const router = express.Router();
 
 module.exports = (pool) => {
 
-  // GET: Obtener movimientos y estado de la caja de hoy
+  // GET: Obtener movimientos y estado de la caja de hoy (Corregido con Zona Horaria)
   router.get('/hoy', async (req, res) => {
     try {
       // 🔒 AUTO-CIERRE: Cerrar automáticamente cajas de días anteriores que quedaron abiertas
@@ -20,7 +20,12 @@ module.exports = (pool) => {
       const day = String(now.getDate()).padStart(2, '0');
       const today = `${year}-${month}-${day}`;
       
-      let cashRes = await pool.query('SELECT * FROM daily_cash WHERE cash_date::text LIKE $1', [`${today}%`]);
+      // Búsqueda directa por tipo DATE en PostgreSQL (evita fallos de LIKE en timestamps)
+      let cashRes = await pool.query(
+        'SELECT * FROM daily_cash WHERE cash_date::date = $1::date ORDER BY id DESC LIMIT 1', 
+        [today]
+      );
+
       if (cashRes.rows.length === 0) {
         cashRes = await pool.query(
           "INSERT INTO daily_cash (cash_date, total_incomes, total_expenses, closing_balance, status) VALUES ($1, 0, 0, 0, 'OPEN') RETURNING *",
@@ -29,10 +34,11 @@ module.exports = (pool) => {
       }
       let dailyCash = cashRes.rows[0];
 
-      // Traer movimientos filtrando por el ID de la caja O por la fecha de hoy
+      // Traer movimientos asegurando el ID de caja O contemplando la fecha en la zona horaria de la DB
       const movementsRes = await pool.query(
         `SELECT * FROM cash_movements 
-         WHERE daily_cash_id = $1 OR created_at::date = $2::date 
+         WHERE daily_cash_id = $1 
+            OR (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Cordoba')::date = $2::date 
          ORDER BY created_at DESC`,
         [dailyCash.id, today]
       );
