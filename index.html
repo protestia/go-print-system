@@ -167,6 +167,7 @@
         <div class="menu-item" id="btn-historial" onclick="cargarSeccion('historial')">📚 HISTORIAL</div>
         <div class="menu-item" id="btn-precios" onclick="cargarSeccion('precios')">🏷️ LISTA DE PRECIOS</div>
         <div class="menu-item" id="btn-caja" onclick="cargarSeccion('caja')">💰 CAJA</div>
+        <div class="menu-item" id="btn-clientes" onclick="cargarSeccion('clientes')">👥 CLIENTES</div>
       </div>
 
       <div class="user-info">
@@ -342,6 +343,29 @@
 
       </div>
 
+      <!-- 4. VISTA DE GESTIÓN DE CLIENTES -->
+      <div id="seccion-clientes" style="display: none; width: 100%;">
+        <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px;">
+          <button onclick="abrirModalNuevoCliente()" style="background: #5b3693; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer;">
+            + Nuevo Cliente
+          </button>
+        </div>
+
+        <!-- Buscador de Clientes -->
+        <input 
+          type="text" 
+          id="buscar-cliente" 
+          placeholder="🔍 Buscar por nombre, empresa o celular..." 
+          onkeyup="filtrarClientes()" 
+          style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.95rem; outline: none; margin-bottom: 20px; background: white;"
+        >
+
+        <!-- Grilla de Tarjetas de Clientes -->
+        <div id="grid-clientes" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+          <!-- Se genera dinámicamente -->
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -421,6 +445,195 @@
     </div>
   </div>
 
+ <!-- MODAL: REGISTRAR / EDITAR CLIENTE -->
+<div id="modal-nuevo-cliente" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999;">
+  <div style="background: white; padding: 25px; border-radius: 12px; width: 450px; max-width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+    <h3 id="modal-cliente-titulo" style="color: #5b3693; margin-top: 0; margin-bottom: 15px;">➕ Registrar Nuevo Cliente</h3>
+    <form onsubmit="guardarCliente(event)">
+      <input type="hidden" id="cliente-id">
+      
+      <!-- 1° LUGAR: Empresa / Nombre Fantasía (Principal Obligatorio) -->
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Empresa / Nombre Fantasía (*):</label>
+        <input type="text" id="cliente-empresa" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. Imprenta Central / CÓDIGO GRÁFICO">
+      </div>
+
+      <!-- 2° LUGAR: Contacto / Razón Social (Secundario Opcional) -->
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Nombre del Contacto / Razón Social:</label>
+        <input type="text" id="cliente-nombre" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. Juan Pérez">
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+        <div style="flex: 1;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Celular / WhatsApp:</label>
+          <input type="text" id="cliente-telefono" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. 3511234567">
+        </div>
+        <div style="flex: 1;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">DNI / CUIT:</label>
+          <input type="text" id="cliente-dni" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. 20-30405060-7">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Dirección de Entrega:</label>
+        <input type="text" id="cliente-direccion" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. Av. Colón 1234">
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Email:</label>
+        <input type="email" id="cliente-email" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. cliente@mail.com">
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Notas internas:</label>
+        <textarea id="cliente-notas" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; height: 60px;" placeholder="Notas adicionales..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" onclick="cerrarModalCliente('modal-nuevo-cliente')" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+        <button type="submit" style="padding: 8px 14px; background: #5b3693; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Guardar Cliente</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: DATOS DEL CLIENTE -->
+<div id="modal-datos-cliente" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999;">
+  <div style="background: white; padding: 25px; border-radius: 12px; width: 450px; max-width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2); position: relative;">
+    
+    <h3 id="modal-datos-titulo" style="color: #5b3693; margin-top: 0; margin-bottom: 15px;">📋 Datos del Cliente</h3>
+    
+    <!-- CUERPO DE DATOS (Aquí se inyectan los datos por JS) -->
+    <div id="modal-datos-body" style="line-height: 1.8; font-size: 14px; color: #334155;"></div>
+
+    <!-- BOTONES ÚNICOS DENTRO DEL MODAL -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; border-top: 1px solid #f3f4f6; padding-top: 15px;">
+      <button id="btn-editar-cliente-modal" type="button" style="padding: 8px 14px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+        ✏️ Editar Datos
+      </button>
+      <button type="button" onclick="cerrarModalCliente('modal-datos-cliente')" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">
+        Cerrar
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL: ESTADO DE CUENTA (MOVIMIENTOS) -->
+<div id="modal-cuenta-cliente" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 9999;">
+  <div style="background: white; padding: 25px; border-radius: 12px; width: 850px; max-width: 95%; max-height: 90vh; overflow-y: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3 id="cuenta-cliente-titulo" style="color: #5b3693; margin: 0;">📜 Estado de Cuenta</h3>
+      <button id="btn-agregar-pago-cliente" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer;">
+        ➕ Registrar Pago
+      </button>
+    </div>
+
+    <div id="cuenta-cliente-resumen" style="margin-bottom: 15px; padding: 12px; border-radius: 8px; font-weight: bold;"></div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+      <thead>
+        <tr style="background: #5b3693; color: white; text-align: left;">
+          <th style="padding: 10px;">FECHA</th>
+          <th style="padding: 10px;">N° ORDEN</th>
+          <th style="padding: 10px; text-align: right;">IMPORTE</th>
+          <th style="padding: 10px; text-align: center;">MÉTODO</th>
+          <th style="padding: 10px; text-align: right;">PAGOS</th>
+          <th style="padding: 10px; text-align: right;">TOTAL</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-cuenta-body"></tbody>
+    </table>
+
+    <div style="text-align: right; margin-top: 20px;">
+      <button onclick="cerrarModalCliente('modal-cuenta-cliente')" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer;">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Detalle de Caja Histórica -->
+<div id="modal-detalle-caja" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000;">
+  <div style="background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+    <h3 id="detalle-caja-titulo" style="margin-top: 0; color: #4c1d95;">📜 Detalle de Caja</h3>
+    
+    <div id="detalle-caja-resumen" style="display: flex; gap: 15px; margin-bottom: 20px; font-weight: bold; text-align: center;">
+      <div style="flex: 1; background: #ecfdf5; padding: 10px; border-radius: 8px; color: #047857;">
+        Ingresos: <span id="det-ingresos">$0</span>
+      </div>
+      <div style="flex: 1; background: #fef2f2; padding: 10px; border-radius: 8px; color: #b91c1c;">
+        Egresos: <span id="det-egresos">$0</span>
+      </div>
+      <div style="flex: 1; background: #f3e8ff; padding: 10px; border-radius: 8px; color: #6b21a8;">
+        Saldo Cierre: <span id="det-saldo">$0</span>
+      </div>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+      <thead>
+        <tr style="background: #4c1d95; color: white; text-align: left;">
+          <th style="padding: 8px;">Hora</th>
+          <th style="padding: 8px;">Tipo</th>
+          <th style="padding: 8px;">Monto</th>
+          <th style="padding: 8px;">Método</th>
+          <th style="padding: 8px;">Detalle / Cliente</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-detalle-caja-body">
+        <!-- Se llena dinámicamente -->
+      </tbody>
+    </table>
+
+    <div style="text-align: right; margin-top: 20px;">
+      <button onclick="document.getElementById('modal-detalle-caja').style.display='none'" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SECUNDARIO: REGISTRAR / EDITAR PAGO DIRECTO -->
+<div id="modal-registrar-pago-directo" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 10000;">
+  <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; max-width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+    <h3 style="color: #10b981; margin-top: 0; margin-bottom: 15px;">💵 Cargar / Editar Pago</h3>
+    <form onsubmit="guardarPagoClienteDirecto(event)">
+      <!-- CAMPOS OCULTOS PARA CONTROL DE ID -->
+      <input type="hidden" id="pago-id-hidden">
+      <input type="hidden" id="pago-cliente-id">
+      <input type="hidden" id="pago-orden-id">
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Monto Abonado ($):</label>
+        <input type="number" id="pago-monto" step="0.01" min="0.01" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="0.00">
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Forma / Medio de Pago:</label>
+        <select id="pago-metodo" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+          <option value="EFECTIVO">Efectivo</option>
+          <option value="TRANSFERENCIA">Transferencia / Banco</option>
+          <option value="TRANSFERENCIA_SAS">Transferencia SAS</option>
+          <option value="MERCADO_PAGO">Mercado Pago</option>
+          <option value="NARANJA_X">Naranja X</option>
+          <option value="CHEQUE">Cheque</option>
+          <option value="E_CHEQ">E-cheq</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Notas / Referencia (Opcional):</label>
+        <input type="text" id="pago-notas" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej: Seña / Nro Comprobante">
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" id="btn-eliminar-pago" onclick="eliminarPagoDirecto()" style="display:none; padding: 8px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">🗑️ Eliminar</button>
+        <div style="display: flex; gap: 10px; margin-left: auto;">
+          <button type="button" onclick="cerrarModalCliente('modal-registrar-pago-directo')" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+          <button type="submit" style="padding: 8px 14px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Guardar Pago</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
   <!-- Carga del módulo JS de la lista de precios -->
   <script src="/listaPrecios.js"></script>
   
@@ -434,22 +647,22 @@
       if (usuarioActual) mostrarApp();
     };
 
-    // 🔄 Auto-refresh inteligente
-    setInterval(() => {
-      if (usuarioActual && typeof cargarOrdenes === 'function') {
-        if (seccionActual === 'precios' || seccionActual === 'caja') return;
+   // 🔄 Auto-refresh inteligente (se omite en Precios, Caja e Historial)
+setInterval(() => {
+  if (usuarioActual && typeof cargarOrdenes === 'function') {
+    if (seccionActual === 'precios' || seccionActual === 'caja' || seccionActual === 'historial') return;
 
-        const activeTag = document.activeElement ? document.activeElement.tagName : '';
-        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
-          return; 
-        }
+    const activeTag = document.activeElement ? document.activeElement.tagName : '';
+    if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
+      return; 
+    }
 
-        const inputBuscar = document.getElementById('input-buscar');
-        if (!inputBuscar || inputBuscar.value.trim() === '') {
-          cargarOrdenes();
-        }
-      }
-    }, 5000);
+    const inputBuscar = document.getElementById('input-buscar');
+    if (!inputBuscar || inputBuscar.value.trim() === '') {
+      cargarOrdenes();
+    }
+  }
+}, 5000);
 
     async function realizarLogin(e) {
       e.preventDefault();
@@ -567,6 +780,8 @@
       }
     }
 
+
+
     function cerrarSesion() {
       localStorage.removeItem('goprint_user');
       usuarioActual = null;
@@ -575,54 +790,62 @@
     }
 
     function cargarSeccion(seccion) {
-      const role = (usuarioActual?.role || '').toLowerCase();
-      if ((role === 'impresion' && seccion === 'diseno') || 
-          (role === 'entrega' && (seccion === 'diseno' || seccion === 'impresion'))) {
-        return;
-      }
+  const role = (usuarioActual?.role || '').toLowerCase();
+  if ((role === 'impresion' && seccion === 'diseno') || 
+      (role === 'entrega' && (seccion === 'diseno' || seccion === 'impresion'))) {
+    return;
+  }
 
-      seccionActual = seccion;
-      document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
-      const activeEl = document.getElementById(`btn-${seccion}`);
-      if (activeEl) activeEl.classList.add('active');
+  seccionActual = seccion;
+  document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+  const activeEl = document.getElementById(`btn-${seccion}`);
+  if (activeEl) activeEl.classList.add('active');
 
-      const titulos = {
-        diseno: 'Área de Diseño 🎨',
-        impresion: 'Área de Impresión 🖨️',
-        entrega: 'Área de Entrega 📦',
-        historial: 'Historial de Órdenes Entregadas 📚',
-        precios: 'Lista de Precios Actuales 📋',
-        caja: 'Gestión de Caja Diaria 💰'
-      };
-      
-      const tituloEl = document.getElementById('seccion-titulo');
-      if (tituloEl) tituloEl.innerText = titulos[seccion] || '';
+  const titulos = {
+    diseno: 'Área de Diseño 🎨',
+    impresion: 'Área de Impresión 🖨️',
+    entrega: 'Área de Entrega 📦',
+    historial: 'Historial de Órdenes Entregadas 📚',
+    precios: 'Lista de Precios Actuales 📋',
+    caja: 'Gestión de Caja Diaria 💰',
+    clientes: 'Gestión de Clientes 👥'
+  };
+  
+  const tituloEl = document.getElementById('seccion-titulo');
+  if (tituloEl) tituloEl.innerText = titulos[seccion] || '';
 
-      const inputBuscar = document.getElementById('input-buscar');
-      if (inputBuscar) inputBuscar.value = '';
+  const inputBuscar = document.getElementById('input-buscar');
+  if (inputBuscar) inputBuscar.value = '';
 
-      const containerOrdenes = document.getElementById('orders-container');
-      const seccionPrecios = document.getElementById('seccion-precios');
-      const seccionCaja = document.getElementById('seccion-caja');
-      const inputBuscarOT = document.getElementById('input-buscar');
+  const containerOrdenes = document.getElementById('orders-container');
+  const seccionPrecios = document.getElementById('seccion-precios');
+  const seccionCaja = document.getElementById('seccion-caja');
+  const seccionClientes = document.getElementById('seccion-clientes');
+  const inputBuscarOT = document.getElementById('input-buscar');
 
-      if (containerOrdenes) containerOrdenes.style.display = 'none';
-      if (seccionPrecios) seccionPrecios.style.display = 'none';
-      if (seccionCaja) seccionCaja.style.display = 'none';
-      if (inputBuscarOT) inputBuscarOT.style.display = 'none';
+  // Ocultar todas las vistas
+  if (containerOrdenes) containerOrdenes.style.display = 'none';
+  if (seccionPrecios) seccionPrecios.style.display = 'none';
+  if (seccionCaja) seccionCaja.style.display = 'none';
+  if (seccionClientes) seccionClientes.style.display = 'none';
+  if (inputBuscarOT) inputBuscarOT.style.display = 'none';
 
-      if (seccion === 'precios') {
-        if (seccionPrecios) seccionPrecios.style.display = 'block';
-        if (typeof cargarListaPrecios === 'function') cargarListaPrecios();
-      } else if (seccion === 'caja') {
-        if (seccionCaja) seccionCaja.style.display = 'block';
-        cargarCajaHoy();
-      } else {
-        if (inputBuscarOT) inputBuscarOT.style.display = 'block';
-        if (containerOrdenes) containerOrdenes.style.display = 'grid';
-        cargarOrdenes();
-      }
-    }
+  // Mostrar solo la seleccionada
+  if (seccion === 'precios') {
+    if (seccionPrecios) seccionPrecios.style.display = 'block';
+    if (typeof cargarListaPrecios === 'function') cargarListaPrecios();
+  } else if (seccion === 'caja') {
+    if (seccionCaja) seccionCaja.style.display = 'block';
+    cargarCajaHoy();
+  } else if (seccion === 'clientes') {
+    if (seccionClientes) seccionClientes.style.display = 'block';
+    cargarClientes();
+  } else {
+    if (inputBuscarOT) inputBuscarOT.style.display = 'block';
+    if (containerOrdenes) containerOrdenes.style.display = 'grid';
+    cargarOrdenes();
+  }
+}
 
     async function cargarOrdenes() {
       if (seccionActual === 'precios' || seccionActual === 'caja') return;
@@ -651,6 +874,343 @@
       }
     }
 
+    let listaClientesGlobal = [];
+
+// 1. Obtiene los clientes desde la API
+async function cargarClientes() {
+  try {
+    const res = await fetch('/api/clientes');
+    listaClientesGlobal = await res.json();
+    renderizarTarjetasClientes(listaClientesGlobal);
+  } catch (err) {
+    console.error('Error al cargar clientes:', err);
+  }
+}
+
+// 2. Dibuja las tarjetas de cada cliente en la grilla
+function renderizarTarjetasClientes(lista) {
+  const grid = document.getElementById('grid-clientes');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  if (!Array.isArray(lista) || lista.length === 0) {
+    grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #666; font-weight: bold;">No hay clientes registrados.</p>';
+    return;
+  }
+
+  lista.forEach(c => {
+    const saldo = parseFloat(c.saldo || 0);
+    
+    let saldoTexto = '';
+    let saldoColor = '#10b981';
+
+    if (saldo === 0) {
+      saldoTexto = '$0.00 (Al día)';
+    } else if (saldo < 0) {
+      saldoTexto = `-$${Math.abs(saldo).toLocaleString('es-AR', {minimumFractionDigits: 2})} (En deuda 🔴)`;
+      saldoColor = '#ef4444';
+    } else {
+      saldoTexto = `+$${saldo.toLocaleString('es-AR', {minimumFractionDigits: 2})} (A favor 🟢)`;
+      saldoColor = '#10b981';
+    }
+
+    const tituloPrincipal = c.company && c.company.trim() !== '' ? c.company : c.name;
+    const subtituloContacto = c.company && c.company.trim() !== '' ? `👤 ${c.name}` : '👤 Particular';
+
+    const card = document.createElement('div');
+    card.style = "background: white; border-radius: 10px; padding: 18px; border: 1px solid #e5e7eb; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; position: relative;";
+    
+    // Escapamos comillas simples para evitar errores de sintaxis en el confirm
+    const nombreEscapado = (tituloPrincipal || '').replace(/'/g, "\\'");
+
+    card.innerHTML = `
+      <div>
+        <!-- Botón para Eliminar Cliente -->
+        <button onclick="eliminarCliente(${c.id}, '${nombreEscapado}')" title="Eliminar cliente" style="position: absolute; top: 12px; right: 12px; background: transparent; border: none; color: #ef4444; font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='transparent'">
+          🗑️
+        </button>
+
+        <div style="font-size: 18px; font-weight: bold; color: #5b3693; margin-bottom: 4px; padding-right: 25px;">🏢 ${tituloPrincipal}</div>
+        <div style="font-size: 13px; color: #6b7280; margin-bottom: 12px; font-weight: 500;">${subtituloContacto}</div>
+        
+        <div style="background: #f9fafb; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
+          <div style="font-size: 14px; font-weight: bold; color: ${saldoColor};">
+            💵 SALDO: ${saldoTexto}
+          </div>
+          <div style="font-size: 13px; color: #4b5563; margin-top: 4px;">
+            🟡 ÓRDENES ACTIVAS: <strong>${c.ordenes_activas || 0}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 10px;">
+        <button onclick="verDatosCliente(${c.id})" style="flex: 1; padding: 8px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; color: #374151;">
+          📋 Ver Datos
+        </button>
+        <button onclick="verCuentaCliente(${c.id})" style="flex: 1; padding: 8px; background: #5b3693; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">
+          👁️ Ver Cuenta
+        </button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// Función JavaScript para confirmar y ejecutar la eliminación
+async function eliminarCliente(id, nombre) {
+  if (!confirm(`⚠️ ¿Estás seguro de que deseas eliminar al cliente "${nombre}"?\n\nEsta acción eliminará el registro del cliente.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/clientes/${id}`, {
+      method: 'DELETE'
+    });
+
+    if (res.ok) {
+      if (typeof cargarClientes === 'function') {
+        cargarClientes(); // Recarga la grilla de clientes
+      }
+    } else {
+      const err = await res.json();
+      alert("❌ No se pudo eliminar el cliente: " + (err.error || "Error de servidor"));
+    }
+  } catch (error) {
+    console.error("Error al eliminar cliente:", error);
+    alert("❌ Error de conexión al intentar eliminar el cliente.");
+  }
+}
+
+async function verDatosCliente(id) {
+  try {
+    // 1. Buscar en la lista global (comparación flexible ==)
+    let c = (typeof listaClientesGlobal !== 'undefined') 
+      ? listaClientesGlobal.find(x => x.id == id) 
+      : null;
+
+    // 2. Si no se encuentra localmente, pedir al backend
+    if (!c) {
+      const res = await fetch(`/api/clientes/${id}`);
+      if (res.ok) {
+        c = await res.json();
+      }
+    }
+
+    if (!c) {
+      alert("❌ No se pudieron cargar los datos del cliente.");
+      return;
+    }
+
+    // 3. Determinar jerarquía (Empresa primero, Contacto después)
+    const empresaTitulo = (c.company && c.company.trim() !== '') ? c.company : c.name;
+    const contactoSubtitulo = (c.company && c.company.trim() !== '') ? `👤 Contacto: ${c.name}` : '👤 Particular';
+
+    // 4. Inyectar encabezado y datos en el modal
+    const bodyElem = document.getElementById('modal-datos-body');
+    if (bodyElem) {
+      bodyElem.innerHTML = `
+        <div style="border-bottom: 2px solid #f3f4f6; padding-bottom: 10px; margin-bottom: 15px;">
+          <div style="font-size: 20px; font-weight: bold; color: #5b3693;">🏢 ${empresaTitulo}</div>
+          <div style="font-size: 13px; color: #6b7280; font-weight: 500; margin-top: 2px;">${contactoSubtitulo}</div>
+        </div>
+
+        <p style="margin: 6px 0;"><strong>📱 Celular:</strong> ${c.phone ? `<a href="https://wa.me/${c.phone.replace(/\D/g,'')}" target="_blank" style="color: #10b981; font-weight: bold; text-decoration: none;">${c.phone} 💬 (Enviar WA)</a>` : '-'}</p>
+        <p style="margin: 6px 0;"><strong>🆔 DNI / CUIT:</strong> ${c.dni_cuit || '-'}</p>
+        <p style="margin: 6px 0;"><strong>📍 Dirección:</strong> ${c.address || '-'}</p>
+        <p style="margin: 6px 0;"><strong>✉️ Email:</strong> ${c.email || '-'}</p>
+        <p style="margin: 6px 0;"><strong>📝 Notas:</strong> ${c.notes || '-'}</p>
+      `;
+    }
+
+    // 5. Vincular el botón "Editar Datos"
+    const btnEdit = document.getElementById('btn-editar-cliente-modal');
+    if (btnEdit) {
+      btnEdit.onclick = () => {
+        cerrarModalCliente('modal-datos-cliente');
+        if (typeof abrirModalEditarCliente === 'function') {
+          abrirModalEditarCliente(c);
+        }
+      };
+    }
+
+    // 6. Abrir la ventana modal
+    document.getElementById('modal-datos-cliente').style.display = 'flex';
+  } catch (err) {
+    console.error("Error en verDatosCliente:", err);
+  }
+}
+let clienteActualIdEnModal = null;
+
+async function verCuentaCliente(id) {
+  try {
+    clienteActualIdEnModal = id;
+    const res = await fetch(`/api/clientes/${id}/cuenta`);
+    const data = await res.json();
+
+    const nombreMostrar = data.cliente.displayName || data.cliente.company || data.cliente.name;
+    document.getElementById('cuenta-cliente-titulo').innerText = `📜 Estado de Cuenta: ${nombreMostrar}`;
+    
+    // Configurar el botón principal de registrar pago en la cabecera
+    const btnPago = document.getElementById('btn-agregar-pago-cliente');
+    if (btnPago) {
+      btnPago.onclick = () => abrirModalPagoDirecto(id, null);
+    }
+
+    const saldo = parseFloat(data.saldo_final || 0);
+    const esAlDia = saldo >= 0;
+    const resElem = document.getElementById('cuenta-cliente-resumen');
+    resElem.style.background = esAlDia ? '#d1fae5' : '#fee2e2';
+    resElem.style.color = esAlDia ? '#065f46' : '#991b1b';
+    resElem.innerText = esAlDia ? `SALDO ACTUAL: $0.00 (Cuenta al día 🟢)` : `SALDO ACTUAL EN DEUDA: -$${Math.abs(saldo).toLocaleString('es-AR', {minimumFractionDigits: 2})} 🔴`;
+
+    const tbody = document.getElementById('tabla-cuenta-body');
+    tbody.innerHTML = '';
+
+    if (!data.movimientos || data.movimientos.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 15px; color: #666;">Sin movimientos registrados.</td></tr>';
+    } else {
+      data.movimientos.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+
+        const totalColor = m.total_saldo < 0 ? '#ef4444' : '#10b981';
+
+        // Botón + verde únicamente en las filas de las Órdenes de Trabajo
+        const botonAgregarPago = m.tipo === 'ORDEN' ? 
+          `<button onclick="abrirModalPagoDirecto(${id}, ${m.orden_id_raw || 'null'})" title="Abonar a esta orden" style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 2px 7px; font-weight: bold; cursor: pointer; margin-left: 6px;">+</button>` : '';
+
+        // ✏️ Botón para editar (solo aparece en filas de PAGO)
+        const botonEditarPago = m.tipo === 'PAGO' ? 
+          `<button onclick="abrirModalEditarPago(${m.pago_id || 'null'}, ${id}, ${m.pagos}, '${m.metodo || 'EFECTIVO'}')" title="Editar pago" style="background: transparent; border: none; cursor: pointer; padding: 2px 4px; margin-left: 2px; font-size: 13px;">✏️</button>` : '';
+
+        // ❌ Botón para ELIMINAR al final de la fila
+        let botonEliminar = '';
+        if (m.tipo === 'PAGO') {
+          botonEliminar = `<button onclick="eliminarPagoDirectoCuenta(${m.pago_id}, ${id})" title="Eliminar pago de la cuenta" style="background: transparent; border: none; cursor: pointer; padding: 2px 4px; font-size: 12px; margin-left: 6px;">❌</button>`;
+        } else if (m.tipo === 'ORDEN') {
+          botonEliminar = `<button onclick="eliminarOrdenDesdeCuenta(${m.orden_id_raw}, ${id})" title="Eliminar orden completa" style="background: transparent; border: none; cursor: pointer; padding: 2px 4px; font-size: 12px; margin-left: 6px;">❌</button>`;
+        }
+
+        tr.innerHTML = `
+          <td style="padding: 10px; font-size: 13px;">${m.fecha}</td>
+          <td style="padding: 10px; font-weight: bold; font-size: 13px;">${m.num_orden}</td>
+          <td style="padding: 10px; text-align: right; color: #ef4444; font-size: 13px;">${m.importe > 0 ? `$${m.importe.toLocaleString('es-AR', {minimumFractionDigits: 2})}` : '-'}</td>
+          <td style="padding: 10px; text-align: center; font-size: 12px; font-weight: bold; color: #6b7280;">${m.metodo || '-'}</td>
+          <td style="padding: 10px; text-align: right; color: #10b981; font-weight: bold; font-size: 13px;">
+            ${m.pagos > 0 ? `$${m.pagos.toLocaleString('es-AR', {minimumFractionDigits: 2})}` : '-'}
+            ${botonAgregarPago}
+            ${botonEditarPago}
+          </td>
+          <td style="padding: 10px; text-align: right; font-weight: bold; color: ${totalColor}; font-size: 13px;">
+            $${m.total_saldo.toLocaleString('es-AR', {minimumFractionDigits: 2})}
+            ${botonEliminar}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('modal-cuenta-cliente').style.display = 'flex';
+  } catch (err) {
+    console.error('Error al cargar la cuenta:', err);
+  }
+}
+
+// Eliminar un Pago directo desde la ❌
+async function eliminarPagoDirectoCuenta(pagoId, clienteId) {
+  if (!pagoId) return;
+  if (!confirm("⚠️ ¿Deseas eliminar este registro de pago? Se recalculará el saldo del cliente.")) return;
+
+  try {
+    const res = await fetch(`/api/clientes/pagos/${pagoId}`, { method: 'DELETE' });
+    if (res.ok) {
+      verCuentaCliente(clienteId);
+      if (typeof cargarClientes === 'function') cargarClientes();
+      if (typeof cargarCajaHoy === 'function') cargarCajaHoy();
+    } else {
+      const err = await res.json();
+      alert("❌ No se pudo eliminar el pago: " + (err.error || "Error de servidor"));
+    }
+  } catch (err) {
+    console.error("Error al eliminar pago:", err);
+    alert("❌ Error de conexión al intentar eliminar.");
+  }
+}
+
+// Eliminar una Orden completa desde la ❌
+async function eliminarOrdenDesdeCuenta(otId, clienteId) {
+  if (!otId) return;
+  if (!confirm(`⚠️ ¿Deseas eliminar la Orden OT #${otId}? Esta acción eliminará los ítems y afectará el saldo.`)) return;
+
+  try {
+    const res = await fetch(`/api/ordenes/${otId}`, { method: 'DELETE' });
+    if (res.ok) {
+      verCuentaCliente(clienteId);
+      if (typeof cargarClientes === 'function') cargarClientes();
+    } else {
+      alert("❌ No se pudo eliminar la orden.");
+    }
+  } catch (err) {
+    console.error("Error al eliminar orden:", err);
+  }
+}
+
+// Funciones para abrir y procesar el modal de pago directo
+function abrirModalPagoDirecto(clientId, workOrderId) {
+  document.getElementById('pago-cliente-id').value = clientId;
+  document.getElementById('pago-orden-id').value = workOrderId || '';
+  document.getElementById('pago-monto').value = '';
+  document.getElementById('pago-notas').value = '';
+  document.getElementById('modal-registrar-pago-directo').style.display = 'flex';
+}
+
+async function guardarPagoClienteDirecto(event) {
+  event.preventDefault();
+
+  const clientId = document.getElementById('pago-cliente-id').value;
+  const workOrderId = document.getElementById('pago-orden-id').value;
+  const amount = parseFloat(document.getElementById('pago-monto').value);
+  const paymentMethod = document.getElementById('pago-metodo').value;
+  const notes = document.getElementById('pago-notas').value.trim();
+
+  try {
+    const res = await fetch('/api/clientes/pagos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        client_id: clientId, 
+        work_order_id: workOrderId || null, 
+        amount, 
+        payment_method: paymentMethod, 
+        notes 
+      })
+    });
+
+    if (res.ok) {
+      cerrarModalCliente('modal-registrar-pago-directo');
+      verCuentaCliente(clientId); // Refresca la tabla en caliente
+      if (typeof cargarClientes === 'function') cargarClientes(); // Refresca los saldos de la grilla
+    } else {
+      const err = await res.json();
+      alert("❌ Error al guardar el pago: " + (err.error || "Error de servidor"));
+    }
+  } catch (error) {
+    console.error("Error al registrar pago:", error);
+    alert("❌ Error de conexión al guardar el pago.");
+  }
+}
+
+// 3. Filtra la lista según lo ingresado en la barra de búsqueda
+function filtrarClientes() {
+  const txt = document.getElementById('buscar-cliente').value.toLowerCase();
+  const filtrados = listaClientesGlobal.filter(c => 
+    (c.name || '').toLowerCase().includes(txt) ||
+    (c.company || '').toLowerCase().includes(txt) ||
+    (c.phone || '').toLowerCase().includes(txt)
+  );
+  renderizarTarjetasClientes(filtrados);
+}
+
     function filtrarOrdenes() {
       const inputEl = document.getElementById('input-buscar');
       if (!inputEl) return;
@@ -670,7 +1230,7 @@
   container.innerHTML = '';
 
   if (!Array.isArray(ordenes) || ordenes.length === 0) {
-    container.innerHTML = '<p style="color: #64748b; font-weight: bold;">No se encontraron pedidos con ese criterio de búsqueda.</p>';
+    container.innerHTML = '<p style="color: #64748b; font-weight: bold; grid-column: 1/-1;">No se encontraron pedidos con ese criterio de búsqueda.</p>';
     return;
   }
 
@@ -754,6 +1314,61 @@
 
     const materialesUnicos = [...new Set(resumenMateriales)].join(', ');
 
+    // ⚡ VISTA COMPACTA / CONTRAÍBLE EXCLUSIVA PARA HISTORIAL
+    if (seccionActual === 'historial') {
+      const esFijada = ot.is_pinned === true;
+
+      container.innerHTML += `
+        <div class="card delivered ${esFijada ? 'pinned' : ''}" style="height: fit-content; transition: all 0.2s ease;">
+          <!-- ENCABEZADO PERMANENTE (Siempre Visible) -->
+          <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleHistorialDetalle(${ot.ot_numero})">
+            <div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <button onclick="togglePin(event, ${ot.ot_numero}, ${!esFijada})" class="btn-pin ${esFijada ? 'pinned' : ''}" title="${esFijada ? 'Desfijar orden' : 'Fijar arriba'}">📌</button>
+                <h3 class="card-title" style="font-size: 1.1rem; color: #5b3693; margin: 0;">OT #${ot.ot_numero}</h3>
+                <span class="badge badge-success" style="margin-left: 4px;">ENTREGADO ✔️</span>
+              </div>
+              <div style="font-size: 0.95rem; font-weight: bold; color: #1e293b; margin-top: 4px;">
+                🏢 ${ot.client_name || 'Sin Especificar'}
+              </div>
+              <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">
+                📅 Entrega: <strong>${ot.fecha_entrega || ot.fecha_prometida || 'Sin fecha'}</strong> | Total: <strong>$${Number(ot.total_price || 0).toLocaleString('es-AR')} ARS</strong>
+              </div>
+            </div>
+
+            <button id="btn-toggle-ot-${ot.ot_numero}" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; font-weight: bold; color: #5b3693; cursor: pointer; white-space: nowrap;">
+              ▼ Ver Detalle
+            </button>
+          </div>
+
+          <!-- CUERPO EXPANSIBLE (Oculto por defecto) -->
+          <div id="historial-detalle-${ot.ot_numero}" style="display: none; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+            <div class="data-group"><span>Cliente Email:</span> <span class="email-tag">(${ot.client_email})</span></div>
+            ${ot.notes ? `<div class="data-group" style="background: #fef3c7; padding: 6px; border-radius: 6px; margin-top: 4px; font-size: 0.85rem;"><span>📝 Notas:</span> ${ot.notes}</div>` : ''}
+            <div class="data-group"><span>Materiales:</span> ${materialesUnicos || 'Varios / Por definir'}</div>
+            <div class="data-group"><span>Resumen:</span> ${ot.items ? ot.items.length : 0} diseño(s) / ${totalM2.toFixed(2)} m² total</div>
+            
+            <div style="background: #f8fafc; padding: 8px; border-radius: 6px; margin: 10px 0; font-size: 0.85rem;">
+              <div><strong>Fecha Prometida:</strong> ${ot.fecha_prometida || 'No especificada'}</div>
+              <div><strong>Entregado por:</strong> ${ot.entregado_por || 'No especificado'}</div>
+              <div><strong>Fecha de Entrega:</strong> ${ot.fecha_entrega || 'No especificada'}</div>
+            </div>
+
+            <div class="file-actions">
+              <span style="font-size: 0.85rem; font-weight: bold;">Adjuntos / Ítems (${ot.items ? ot.items.length : 0}):</span>
+              <div class="attachments-container">${listadoItemsHTML}</div>
+            </div>
+
+            <button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot" style="margin-top: 8px;">📄 Ver / Descargar Orden de Trabajo</button>
+            <button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>
+          </div>
+        </div>`;
+      return; // Fin para tarjetas de historial
+    }
+
+    // -------------------------------------------------------------
+    // VISTA NORMAL COMPLETA (Diseño, Impresión y Entrega)
+    // -------------------------------------------------------------
     let botonSiguiente = '';
     let seccionBotonesExtras = '';
     let seccionEntregaExtra = '';
@@ -771,42 +1386,30 @@
       
       botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'READY_TO_DELIVER')" class="btn btn-status" style="background-color: ${bgEntrega};" ${disabledEntrega}>Pasar a Entrega ➔</button>`;
       seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-    } else if (seccionActual === 'entrega' || seccionActual === 'historial') {
-      const esHistorial = seccionActual === 'historial';
-      const readonlyAttr = esHistorial ? 'readonly style="background: #f8fafc; border: none; color: #334155;"' : '';
-
+    } else if (seccionActual === 'entrega') {
       seccionEntregaExtra += `
         <div class="input-group">
           <label>Entrega (Fecha Prometida):</label>
-          <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)"` : readonlyAttr} placeholder="No especificada">
+          <input type="text" class="input-custom" value="${ot.fecha_prometida || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_prometida', this.value)" placeholder="No especificada">
         </div>
         <div class="input-group" style="margin-top: 10px;">
           <label>Entregado por:</label>
-          <input type="text" class="input-custom" value="${ot.entregado_por || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)"` : readonlyAttr} placeholder="No especificado">
+          <input type="text" class="input-custom" value="${ot.entregado_por || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'entregado_por', this.value)" placeholder="No especificado">
         </div>
         <div class="input-group" style="margin-top: 8px; margin-bottom: 12px;">
           <label>Fecha de Entrega:</label>
-          <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" ${!esHistorial ? `onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)"` : readonlyAttr} placeholder="No especificada">
+          <input type="text" class="input-custom" value="${ot.fecha_entrega || ''}" onchange="guardarInfoEntrega(${ot.ot_numero}, 'fecha_entrega', this.value)" placeholder="No especificada">
         </div>`;
 
-      if (seccionActual === 'entrega') {
-        const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
-        const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
+      const disabledHistorial = !todosEntregados ? 'disabled title="Debe tildar todos los ítems para entregar"' : '';
+      const bgHistorial = todosEntregados ? '#0ada56' : '#cbd5e1';
 
-        botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
-      }
-      seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
-    } else if (seccionActual === 'historial') {
+      botonSiguiente = `<button onclick="cambiarEstado(${ot.ot_numero}, 'DELIVERED')" class="btn btn-status" style="background-color: ${bgHistorial};" ${disabledHistorial}>Finalizar Entrega (Enviar a Historial) ✔️</button>`;
       seccionBotonesExtras = `<button onclick="generarComprobanteOT(${ot.ot_numero})" class="btn btn-ot">📄 Ver / Descargar Orden de Trabajo</button>`;
     }
 
-    const badgeHTML = seccionActual === 'historial'
-      ? `<span class="badge badge-success">ENTREGADO ✔️</span>`
-      : (tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`);
-
-    const botonAgregarItemHTML = seccionActual === 'diseno' 
-      ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` : '';
-
+    const badgeHTML = tieneMedidaFaltante ? `<span class="badge badge-warning">⚠️ FALTA MEDIDA</span>` : `<span class="badge">${ot.status}</span>`;
+    const botonAgregarItemHTML = seccionActual === 'diseno' ? `<button onclick="agregarItemManual(${ot.ot_numero})" class="btn-add-item">➕ Agregar Ítem</button>` : '';
     const botonEliminarOrden = `<button onclick="eliminarOrden(${ot.ot_numero})" class="btn btn-delete-order">🗑️ Eliminar Orden Completa</button>`;
 
     const esUrgente = ot.is_urgent === true;
@@ -814,7 +1417,7 @@
     const esPrioridad = ot.is_priority === true;
 
     container.innerHTML += `
-      <div class="card ${esFijada ? 'pinned' : ''} ${esPrioridad ? 'priority' : (esUrgente ? 'urgent' : '')} ${tieneMedidaFaltante && seccionActual !== 'historial' ? 'warning' : ''} ${seccionActual === 'historial' ? 'delivered' : ''}">
+      <div class="card ${esFijada ? 'pinned' : ''} ${esPrioridad ? 'priority' : (esUrgente ? 'urgent' : '')} ${tieneMedidaFaltante ? 'warning' : ''}">
         <div class="card-header">
           <h3 class="card-title">
             <button onclick="togglePin(event, ${ot.ot_numero}, ${!esFijada})" class="btn-pin ${esFijada ? 'pinned' : ''}" title="${esFijada ? 'Desfijar orden' : 'Fijar arriba'}">
@@ -825,12 +1428,10 @@
           </h3>
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
             ${badgeHTML}
-            <!-- Checkbox HOY URGENCIA -->
             <label style="font-size: 0.75rem; font-weight: bold; color: #c2410c; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
               <input type="checkbox" ${esUrgente ? 'checked' : ''} onchange="toggleUrgencia(event, ${ot.ot_numero}, this.checked)" style="accent-color: #f97316; cursor: pointer;">
               🔥 HOY URGENCIA
             </label>
-            <!-- Checkbox PRIORIDAD -->
             <label style="font-size: 0.75rem; font-weight: bold; color: #15803d; cursor: pointer; display: flex; align-items: center; gap: 4px;">
               <input type="checkbox" ${esPrioridad ? 'checked' : ''} onchange="togglePrioridad(event, ${ot.ot_numero}, this.checked)" style="accent-color: #16a34a; cursor: pointer;">
               ⭐ PRIORIDAD
@@ -1061,9 +1662,183 @@
       document.getElementById('modal-orden-manual').style.display = 'flex';
     }
 
+    function toggleHistorialDetalle(otNumero) {
+  const detalle = document.getElementById(`historial-detalle-${otNumero}`);
+  const btn = document.getElementById(`btn-toggle-ot-${otNumero}`);
+  
+  if (detalle) {
+    const estaOculto = detalle.style.display === 'none';
+    detalle.style.display = estaOculto ? 'block' : 'none';
+    
+    if (btn) {
+      btn.innerText = estaOculto ? '▲ Ocultar Detalle' : '▼ Ver Detalle';
+      btn.style.background = estaOculto ? '#e2e8f0' : '#f1f5f9';
+    }
+  }
+}
+
     function cerrarModalOrdenManual() {
       document.getElementById('modal-orden-manual').style.display = 'none';
     }
+
+    /* --- FUNCIONES DE CLIENTES --- */
+function abrirModalNuevoCliente() {
+  document.getElementById('cliente-id').value = '';
+  document.getElementById('cliente-nombre').value = '';
+  document.getElementById('cliente-empresa').value = '';
+  document.getElementById('cliente-telefono').value = '';
+  document.getElementById('cliente-dni').value = '';
+  document.getElementById('cliente-direccion').value = '';
+  document.getElementById('cliente-email').value = '';
+  document.getElementById('cliente-notas').value = '';
+  
+  document.getElementById('modal-cliente-titulo').innerText = '➕ Registrar Nuevo Cliente';
+  document.getElementById('modal-nuevo-cliente').style.display = 'flex';
+}
+
+function cerrarModalCliente(idModal) {
+  const modal = document.getElementById(idModal);
+  if (modal) modal.style.display = 'none';
+}
+
+async function guardarCliente(event) {
+  event.preventDefault();
+
+  const id = document.getElementById('cliente-id').value;
+  const company = document.getElementById('cliente-empresa').value.trim();
+  const name = document.getElementById('cliente-nombre').value.trim();
+  const phone = document.getElementById('cliente-telefono').value.trim();
+  const dni_cuit = document.getElementById('cliente-dni').value.trim();
+  const address = document.getElementById('cliente-direccion').value.trim();
+  const email = document.getElementById('cliente-email').value.trim();
+  const notes = document.getElementById('cliente-notas').value.trim();
+
+  // Validar que al menos la empresa o el nombre estén cargados
+  if (!company && !name) {
+    alert("⚠️ Debes ingresar al menos el Nombre de la Empresa o del Contacto.");
+    return;
+  }
+
+  const payload = { company, name, phone, dni_cuit, address, email, notes };
+  const url = id ? `/api/clientes/${id}` : '/api/clientes';
+  const method = id ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      cerrarModalCliente('modal-nuevo-cliente');
+      
+      // Limpiar ID oculto para la próxima apertura
+      document.getElementById('cliente-id').value = '';
+
+      if (typeof cargarClientes === 'function') {
+        cargarClientes(); // Recargar grilla principal
+      }
+    } else {
+      const err = await res.json();
+      alert("❌ Error al guardar el cliente: " + (err.error || "Error de servidor"));
+    }
+  } catch (error) {
+    console.error("Error al guardar cliente:", error);
+    alert("❌ Error de conexión al intentar guardar los cambios.");
+  }
+}
+
+// 1. Función para abrir el modal de edición cargando los inputs
+function abrirModalEditarCliente(cliente) {
+  if (!cliente) return;
+
+  // Cambiar el título del modal
+  const tituloModal = document.getElementById('modal-cliente-titulo');
+  if (tituloModal) {
+    tituloModal.innerText = '✏️ Editar Datos del Cliente';
+  }
+
+  // Cargar los campos con la información existente
+  document.getElementById('cliente-id').value = cliente.id || '';
+  document.getElementById('cliente-empresa').value = cliente.company || '';
+  document.getElementById('cliente-nombre').value = cliente.name || '';
+  document.getElementById('cliente-telefono').value = cliente.phone || '';
+  document.getElementById('cliente-dni').value = cliente.dni_cuit || '';
+  document.getElementById('cliente-direccion').value = cliente.address || '';
+  document.getElementById('cliente-email').value = cliente.email || '';
+  document.getElementById('cliente-notas').value = cliente.notes || '';
+
+  // Abrir el modal de formulario
+  document.getElementById('modal-nuevo-cliente').style.display = 'flex';
+}
+
+// 1. Cargar el ID y datos en la ventana emergente
+function abrirModalEditarPago(pagoId, clientId, montoActual, metodoActual) {
+  console.log("✏️ Editando pago con ID:", pagoId);
+  
+  const hiddenInput = document.getElementById('pago-id-hidden');
+  if (hiddenInput) {
+    hiddenInput.value = (pagoId && pagoId !== 'undefined' && pagoId !== 'null') ? pagoId : '';
+  }
+
+  document.getElementById('pago-cliente-id').value = clientId;
+  document.getElementById('pago-monto').value = montoActual || '';
+  document.getElementById('pago-metodo').value = metodoActual || 'EFECTIVO';
+  
+  const btnEliminar = document.getElementById('btn-eliminar-pago');
+  if (btnEliminar) {
+    btnEliminar.style.display = (pagoId && pagoId !== 'undefined' && pagoId !== 'null') ? 'inline-block' : 'none';
+  }
+
+  document.getElementById('modal-registrar-pago-directo').style.display = 'flex';
+}
+
+// 2. Enviar actualización (PUT) o nuevo pago (POST)
+async function guardarPagoClienteDirecto(event) {
+  event.preventDefault();
+
+  const pagoId = document.getElementById('pago-id-hidden').value;
+  const clientId = document.getElementById('pago-cliente-id').value;
+  const workOrderId = document.getElementById('pago-orden-id') ? document.getElementById('pago-orden-id').value : null;
+  const amount = parseFloat(document.getElementById('pago-monto').value);
+  const paymentMethod = document.getElementById('pago-metodo').value;
+  const notesInput = document.getElementById('pago-notas');
+  const notes = notesInput ? notesInput.value.trim() : '';
+
+  // Determinar método según presencia de ID
+  const esEdicion = pagoId && pagoId !== '' && pagoId !== 'undefined' && pagoId !== 'null';
+  const url = esEdicion ? `/api/clientes/pagos/${pagoId}` : '/api/clientes/pagos';
+  const method = esEdicion ? 'PUT' : 'POST';
+
+  console.log(`📡 Enviando petición ${method} a ${url} con ID:`, pagoId);
+
+  try {
+    const res = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        client_id: clientId, 
+        work_order_id: workOrderId || null, 
+        amount, 
+        payment_method: paymentMethod, 
+        notes 
+      })
+    });
+
+    if (res.ok) {
+      cerrarModalCliente('modal-registrar-pago-directo');
+      document.getElementById('pago-id-hidden').value = ''; // Limpiar el ID oculto
+      verCuentaCliente(clientId);
+      if (typeof cargarClientes === 'function') cargarClientes();
+    } else {
+      const err = await res.json();
+      alert("❌ Error al procesar el pago: " + (err.error || "Error de servidor"));
+    }
+  } catch (error) {
+    console.error("Error al guardar pago:", error);
+  }
+}
 
     async function guardarOrdenManual(event) {
       event.preventDefault();
@@ -1172,49 +1947,101 @@
       }
     }
 
-    async function cargarResumenMensual() {
-      const mes = document.getElementById('caja-mes').value;
-      const anio = document.getElementById('caja-anio').value;
+   async function cargarResumenMensual() {
+  const mes = document.getElementById('caja-mes').value;
+  const anio = document.getElementById('caja-anio').value;
 
-      try {
-        const res = await fetch(`/api/caja/mensual/${anio}/${mes}`);
-        const cierres = await res.json();
+  try {
+    const res = await fetch(`/api/caja/mensual/${anio}/${mes}`);
+    const cierres = await res.json();
 
-        const tbody = document.getElementById('tabla-caja-mensual');
-        tbody.innerHTML = '';
+    const tbody = document.getElementById('tabla-caja-mensual');
+    tbody.innerHTML = '';
 
-        if (cierres.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="padding: 10px; text-align: center;">No hay cierres registrados en este mes.</td></tr>';
-          return;
-        }
-
-        cierres.forEach(c => {
-          const fecha = new Date(c.cash_date).toLocaleDateString('es-AR', { timeZone: 'UTC' });
-          const ingresos = parseFloat(c.total_incomes) || 0;
-          const egresos = parseFloat(c.total_expenses) || 0;
-          const saldo = parseFloat(c.closing_balance) || (ingresos - egresos);
-          const estaCerrada = c.status === 'CLOSED';
-
-          const tr = document.createElement('tr');
-          tr.style.borderBottom = '1px solid #e2e8f0';
-          tr.innerHTML = `
-            <td style="padding: 10px; font-weight: bold;">${fecha}</td>
-            <td style="padding: 10px; color: #10b981; font-weight: bold;">$${ingresos.toLocaleString('es-AR')}</td>
-            <td style="padding: 10px; color: #ef4444; font-weight: bold;">$${egresos.toLocaleString('es-AR')}</td>
-            <td style="padding: 10px; color: #5b3693; font-weight: bold;">$${saldo.toLocaleString('es-AR')}</td>
-            <td style="padding: 10px;">
-              <span style="background: ${estaCerrada ? '#d1fae5' : '#fef3c7'}; color: ${estaCerrada ? '#065f46' : '#92400e'}; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">
-                ${estaCerrada ? 'CERRADA 🔒' : 'ABIERTA 🟢'}
-              </span>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
-
-      } catch (err) {
-        console.error('Error al cargar mensual:', err);
-      }
+    if (cierres.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding: 10px; text-align: center;">No hay cierres registrados en este mes.</td></tr>';
+      return;
     }
+
+    cierres.forEach(c => {
+      const fecha = new Date(c.cash_date).toLocaleDateString('es-AR', { timeZone: 'UTC' });
+      const ingresos = parseFloat(c.total_incomes) || 0;
+      const egresos = parseFloat(c.total_expenses) || 0;
+      const saldo = parseFloat(c.closing_balance) || (ingresos - egresos);
+      const estaCerrada = c.status === 'CLOSED';
+
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid #e2e8f0';
+      tr.innerHTML = `
+        <td style="padding: 10px; font-weight: bold;">${fecha}</td>
+        <td style="padding: 10px; color: #10b981; font-weight: bold;">$${ingresos.toLocaleString('es-AR')}</td>
+        <td style="padding: 10px; color: #ef4444; font-weight: bold;">$${egresos.toLocaleString('es-AR')}</td>
+        <td style="padding: 10px; color: #5b3693; font-weight: bold;">$${saldo.toLocaleString('es-AR')}</td>
+        <td style="padding: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <span style="background: ${estaCerrada ? '#d1fae5' : '#fef3c7'}; color: ${estaCerrada ? '#065f46' : '#92400e'}; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">
+            ${estaCerrada ? 'CERRADA 🔒' : 'ABIERTA 🟢'}
+          </span>
+          <button onclick="verDetalleCajaHistorica(${c.id})" title="Ver movimientos de este día" style="background: #f3e8ff; border: 1px solid #d8b4fe; color: #6b21a8; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: 0.2s;">
+            👁️ Ver
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    console.error('Error al cargar mensual:', err);
+  }
+}
+
+async function verDetalleCajaHistorica(cajaId) {
+  if (!cajaId) return;
+
+  try {
+    const res = await fetch(`/api/caja/detalle/${cajaId}`);
+    if (!res.ok) {
+      alert("❌ No se pudo obtener el detalle de esta caja.");
+      return;
+    }
+    
+    const data = await res.json();
+
+    const fechaFormateada = new Date(data.dailyCash.cash_date).toLocaleDateString('es-AR', { timeZone: 'UTC' });
+    document.getElementById('detalle-caja-titulo').innerText = `📜 Detalle de Caja del Día: ${fechaFormateada}`;
+    
+    document.getElementById('det-ingresos').innerText = `$${parseFloat(data.dailyCash.total_incomes || 0).toLocaleString('es-AR')}`;
+    document.getElementById('det-egresos').innerText = `$${parseFloat(data.dailyCash.total_expenses || 0).toLocaleString('es-AR')}`;
+    document.getElementById('det-saldo').innerText = `$${parseFloat(data.dailyCash.closing_balance || (data.dailyCash.total_incomes - data.dailyCash.total_expenses)).toLocaleString('es-AR')}`;
+
+    const tbody = document.getElementById('tabla-detalle-caja-body');
+    tbody.innerHTML = '';
+
+    if (!data.movements || data.movements.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 15px; color: #888;">No hubo movimientos registrados en este día.</td></tr>';
+    } else {
+      data.movements.forEach(m => {
+        const hora = new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        const esIngreso = m.type === 'INCOME' || m.type === 'INGRESO';
+        
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        tr.innerHTML = `
+          <td style="padding: 8px;">${hora}</td>
+          <td style="padding: 8px; font-weight: bold; color: ${esIngreso ? '#10b981' : '#ef4444'};">${esIngreso ? 'INGRESO' : 'EGRESO'}</td>
+          <td style="padding: 8px; font-weight: bold;">$${parseFloat(m.amount).toLocaleString('es-AR')}</td>
+          <td style="padding: 8px; color: #6b7280; font-weight: bold;">${m.payment_method || '-'}</td>
+          <td style="padding: 8px;">${m.description || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('modal-detalle-caja').style.display = 'flex';
+  } catch (err) {
+    console.error('Error al abrir detalle:', err);
+    alert('❌ Error de conexión al cargar el detalle.');
+  }
+}
 
     async function registrarMovimientoCaja(event) {
       event.preventDefault();
