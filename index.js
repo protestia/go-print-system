@@ -1086,10 +1086,11 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
 
     let movimientos = [];
 
-    // 4. Calcular importes de las órdenes
+   // 4. Calcular importes de las órdenes
     for (const ord of ordersRes.rows) {
       let importe = parseFloat(ord.total_price || 0);
 
+      // Si total_price viene en 0, lo recalculamos desde los ítems
       if (importe === 0) {
         const itemsRes = await pool.query(
           `SELECT i.width_cm, i.height_cm, i.copies, i.area_m2, i.unit_price_override, m.name AS material_name, pr.price_per_m2
@@ -1106,14 +1107,27 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
           const copias = parseInt(item.copies || 1);
           const precioUnitario = parseFloat(item.unit_price_override || item.price_per_m2 || 0);
 
-          const matLower = (item.material_name || '').toLowerCase();
-          const esUnitario = matLower.includes('fly banner') || matLower.includes('roll up') || matLower.includes('portabanner') || matLower.includes('sublimado') || matLower.includes('base cruz') || matLower.includes('contrapeso') || matLower.includes('cartel c');
+          const matLower = (item.material_name || '').toLowerCase().trim();
+
+          // ✅ Lista completa y flexible de productos cobrados por UNIDAD
+          const esUnitario = matLower.includes('fly banner') || 
+                             matLower.includes('roll up') || 
+                             matLower.includes('portabanner') || 
+                             matLower.includes('sublimado') || 
+                             matLower.includes('base cruz') || 
+                             matLower.includes('cruz') || 
+                             matLower.includes('contrapeso') || 
+                             matLower.includes('cartel c') || 
+                             matLower.includes('polyfam');
 
           if (esUnitario) {
+            // Cobro estrictamente por UNIDAD (Precio * Copias)
             importe += precioUnitario * copias;
           } else {
-            const m2 = parseFloat(item.area_m2 || 0) || ((ancho / 100) * (alto / 100));
-            importe += (m2 > 0 ? m2 : 1) * precioUnitario * copias;
+            // Cobro por METRO CUADRADO (Ancho * Alto en metros * Precio * Copias)
+            const m2Calculado = (ancho / 100.0) * (alto / 100.0);
+            const m2Final = m2Calculado > 0 ? m2Calculado : parseFloat(item.area_m2 || 0);
+            importe += m2Final * precioUnitario * copias;
           }
         });
       }
