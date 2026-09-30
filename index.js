@@ -1086,30 +1086,37 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
 
     let movimientos = [];
 
-   // 4. Calcular importes de las órdenes
+   // 4. Calcular importes exactos de las órdenes
     for (const ord of ordersRes.rows) {
-      let importe = parseFloat(ord.total_price || 0);
+      let importe = 0;
 
-      // Si total_price viene en 0, lo recalculamos desde los ítems
-      if (importe === 0) {
-        const itemsRes = await pool.query(
-          `SELECT i.width_cm, i.height_cm, i.copies, i.area_m2, i.unit_price_override, m.name AS material_name, pr.price_per_m2
-           FROM work_order_items i
-           LEFT JOIN materials m ON i.material_id = m.id
-           LEFT JOIN pricing_rules pr ON (pr.material_id = i.material_id AND pr.print_type_id = i.print_type_id)
-           WHERE i.work_order_id = $1`,
-          [ord.id]
-        );
+      // Consultar los ítems asociados a la orden
+      const itemsRes = await pool.query(
+        `SELECT i.width_cm, i.height_cm, i.copies, i.area_m2, i.unit_price_override, 
+                m.name AS material_name, pr.price_per_m2
+         FROM work_order_items i
+         LEFT JOIN materials m ON i.material_id = m.id
+         LEFT JOIN pricing_rules pr ON (pr.material_id = i.material_id AND pr.print_type_id = i.print_type_id)
+         WHERE i.work_order_id = $1`,
+        [ord.id]
+      );
 
+      // Si la orden tiene ítems, sumar el precio real de cada uno
+      if (itemsRes.rows.length > 0) {
         itemsRes.rows.forEach(item => {
           const ancho = parseFloat(item.width_cm || 0);
           const alto = parseFloat(item.height_cm || 0);
           const copias = parseInt(item.copies || 1);
-          const precioUnitario = parseFloat(item.unit_price_override || item.price_per_m2 || 0);
+          
+          // Respetar unit_price_override si existe (incluso si es 0); si es NULL, usar el precio del catálogo
+          const tieneOverride = item.unit_price_override !== null && item.unit_price_override !== undefined && item.unit_price_override !== '';
+          const precioUnitario = tieneOverride 
+            ? parseFloat(item.unit_price_override) 
+            : parseFloat(item.price_per_m2 || 0);
 
           const matLower = (item.material_name || '').toLowerCase().trim();
 
-          // ✅ Lista completa y flexible de productos cobrados por UNIDAD
+          // Lista completa de productos cobrados por UNIDAD
           const esUnitario = matLower.includes('fly banner') || 
                              matLower.includes('roll up') || 
                              matLower.includes('portabanner') || 
@@ -1121,15 +1128,26 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
                              matLower.includes('polyfam');
 
           if (esUnitario) {
-            // Cobro estrictamente por UNIDAD (Precio * Copias)
+            // Cobro por UNIDAD: Precio * Copias
             importe += precioUnitario * copias;
           } else {
-            // Cobro por METRO CUADRADO (Ancho * Alto en metros * Precio * Copias)
+            // Cobro por M²: Ancho * Alto (en m) * Precio * Copias
             const m2Calculado = (ancho / 100.0) * (alto / 100.0);
             const m2Final = m2Calculado > 0 ? m2Calculado : parseFloat(item.area_m2 || 0);
-            importe += m2Final * precioUnitario * copias;
+            
+            // Si tiene área o copias, multiplicamos por el precio unitario
+            if (m2Final > 0) {
+              importe += m2Final * precioUnitario * copias;
+            } else {
+              importe += precioUnitario * copias;
+            }
           }
         });
+      }
+
+      // Resguardo: si la orden no tenía ítems cargados, usar total_price de la tabla principal
+      if (importe === 0 && ord.total_price) {
+        importe = parseFloat(ord.total_price || 0);
       }
 
       movimientos.push({
