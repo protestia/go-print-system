@@ -225,6 +225,72 @@ async function descargarAdjuntosGmail(gmail, messageId, emailBody, emailHtmlBody
   return archivosGuardados;
 }
 
+// Función para consultar y mostrar el detalle en el Modal
+async function verDetalleCajaHistorica(cajaId) {
+  try {
+    const res = await fetch(`/api/caja/detalle/${cajaId}`);
+    const data = await res.json();
+
+    const fechaFormateada = new Date(data.dailyCash.cash_date).toLocaleDateString('es-AR');
+    document.getElementById('detalle-caja-titulo').innerText = `📜 Detalle de Caja del Día: ${fechaFormateada}`;
+    
+    document.getElementById('det-ingresos').innerText = `$${parseFloat(data.dailyCash.total_incomes || 0).toLocaleString('es-AR')}`;
+    document.getElementById('det-egresos').innerText = `$${parseFloat(data.dailyCash.total_expenses || 0).toLocaleString('es-AR')}`;
+    document.getElementById('det-saldo').innerText = `$${parseFloat(data.dailyCash.closing_balance || 0).toLocaleString('es-AR')}`;
+
+    const tbody = document.getElementById('tabla-detalle-caja-body');
+    tbody.innerHTML = '';
+
+    if (!data.movements || data.movements.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 15px; color: #888;">No hubo movimientos registrados en este día.</td></tr>';
+    } else {
+      data.movements.forEach(m => {
+        const hora = new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        const esIngreso = m.type === 'INCOME' || m.type === 'INGRESO';
+        
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        tr.innerHTML = `
+          <td style="padding: 8px;">${hora}</td>
+          <td style="padding: 8px; font-weight: bold; color: ${esIngreso ? '#10b981' : '#ef4444'};">${esIngreso ? 'INGRESO' : 'EGRESO'}</td>
+          <td style="padding: 8px; font-weight: bold;">$${parseFloat(m.amount).toLocaleString('es-AR')}</td>
+          <td style="padding: 8px; color: #6b7280; font-weight: bold;">${m.payment_method || '-'}</td>
+          <td style="padding: 8px;">${m.description || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('modal-detalle-caja').style.display = 'flex';
+  } catch (err) {
+    console.error('Error al abrir detalle:', err);
+    alert('❌ No se pudo cargar el detalle de esta caja.');
+  }
+}
+
+async function eliminarPagoDirecto() {
+  const pagoId = document.getElementById('pago-id-hidden').value;
+  const clientId = document.getElementById('pago-cliente-id').value;
+
+  if (!pagoId) return;
+
+  if (!confirm("⚠️ ¿Estás seguro de que deseas eliminar este registro de pago?")) return;
+
+  try {
+    const res = await fetch(`/api/clientes/pagos/${pagoId}`, { method: 'DELETE' });
+    if (res.ok) {
+      cerrarModalCliente('modal-registrar-pago-directo');
+      verCuentaCliente(clientId);
+      if (typeof cargarClientes === 'function') cargarClientes();
+    } else {
+      const err = await res.json();
+      alert("❌ No se pudo eliminar el pago: " + (err.error || "Error de servidor"));
+    }
+  } catch (err) {
+    console.error("Error al eliminar pago:", err);
+  }
+}
+
 async function extraerDatosOrdenConIA(emailSubject, emailBody, attachmentNames, listaMaterialesValidos, listaPrintTypesValidos) {
   const prompt = `
     Eres el motor de procesamiento inteligente de una imprenta profesional. Analiza el correo e incluye los ítems.
@@ -769,6 +835,53 @@ app.delete('/api/ordenes/:id', async (req, res) => {
   }
 });
 
+// Endpoint para ELIMINAR un pago de la cuenta del cliente
+app.delete('/api/clientes/pagos/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Eliminamos el registro de la tabla de pagos
+    const deleteRes = await pool.query(
+      'DELETE FROM client_payments WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (deleteRes.rowCount === 0) {
+      return res.status(404).json({ error: 'El pago no existe o ya fue eliminado.' });
+    }
+
+    res.json({ success: true, message: 'Pago eliminado con éxito.' });
+  } catch (error) {
+    console.error('❌ Error al eliminar pago:', error);
+    res.status(500).json({ error: 'Fallo interno al intentar eliminar el pago.' });
+  }
+});
+
+// 🗑️ DELETE: Eliminar un cliente por ID
+app.delete('/api/clientes/:id', async (req, res) => {
+  try {
+    const clientId = req.params.id;
+
+    // Verificar si el cliente tiene pagos registrados para evitar incoherencias
+    await pool.query('DELETE FROM client_payments WHERE client_id = $1', [clientId]);
+
+    // Opcional: desvincular órdenes de trabajo si se prefiere mantener el historial de OT
+    await pool.query('UPDATE work_orders SET client_id = NULL WHERE client_id = $1', [clientId]);
+
+    // Eliminar registro del cliente
+    const deleteRes = await pool.query('DELETE FROM clients WHERE id = $1 RETURNING *', [clientId]);
+
+    if (deleteRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    res.json({ message: 'Cliente eliminado correctamente', cliente: deleteRes.rows[0] });
+  } catch (err) {
+    console.error('Error al eliminar cliente:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/ordenes/item/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -829,6 +942,373 @@ app.post('/api/ordenes/:id/item', async (req, res) => {
     `, [id, file_name || 'Item.jpg', material_id, print_type_id, width_cm, height_cm, copies, area_m2.toFixed(2), file_url || '#']);
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 👥 GET: Obtener todos los clientes con cálculo de saldo y órdenes activas
+app.get('/api/clientes', async (req, res) => {
+  try {
+    const clientsQuery = `
+      SELECT 
+        c.*,
+        COALESCE((
+          SELECT SUM(cp.amount) 
+          FROM client_payments cp 
+          WHERE cp.client_id = c.id
+        ), 0) - COALESCE((
+          SELECT SUM(
+            COALESCE(
+              NULLIF(wo.total_price, 0),
+              (
+                SELECT COALESCE(SUM(
+                  COALESCE(
+                    i.unit_price_override * i.copies,
+                    CASE 
+                      WHEN LOWER(m.name) LIKE '%fly banner%' OR LOWER(m.name) LIKE '%roll up%' OR LOWER(m.name) LIKE '%portabanner%' OR LOWER(m.name) LIKE '%sublimado%' OR LOWER(m.name) LIKE '%base cruz%' OR LOWER(m.name) LIKE '%contrapeso%' OR LOWER(m.name) LIKE '%cartel c%'
+                      THEN pr.price_per_m2 * i.copies
+                      ELSE (i.width_cm / 100.0) * (i.height_cm / 100.0) * pr.price_per_m2 * i.copies
+                    END,
+                    0
+                  )
+                ), 0)
+                FROM work_order_items i
+                LEFT JOIN materials m ON i.material_id = m.id
+                LEFT JOIN pricing_rules pr ON (pr.material_id = i.material_id AND pr.print_type_id = i.print_type_id)
+                WHERE i.work_order_id = wo.id
+              )
+            )
+          )
+          FROM work_orders wo
+          WHERE wo.client_id = c.id 
+             OR (c.name IS NOT NULL AND LENGTH(TRIM(c.name)) >= 3 AND wo.client_name ILIKE CONCAT('%', TRIM(c.name), '%'))
+             OR (c.company IS NOT NULL AND LENGTH(TRIM(c.company)) >= 3 AND (
+                  wo.client_name ILIKE CONCAT('%', TRIM(c.company), '%') OR 
+                  TRIM(c.company) ILIKE CONCAT('%', TRIM(wo.client_name), '%')
+                ))
+        ), 0) AS saldo,
+        (
+          SELECT COUNT(*) 
+          FROM work_orders wo 
+          WHERE (
+            wo.client_id = c.id 
+            OR (c.name IS NOT NULL AND LENGTH(TRIM(c.name)) >= 3 AND wo.client_name ILIKE CONCAT('%', TRIM(c.name), '%'))
+            OR (c.company IS NOT NULL AND LENGTH(TRIM(c.company)) >= 3 AND (
+                 wo.client_name ILIKE CONCAT('%', TRIM(c.company), '%') OR 
+                 TRIM(c.company) ILIKE CONCAT('%', TRIM(wo.client_name), '%')
+               ))
+          )
+          AND (wo.status IS NULL OR wo.status != 'DELIVERED')
+        ) AS ordenes_activas
+      FROM clients c
+      ORDER BY COALESCE(NULLIF(c.company, ''), c.name) ASC;
+    `;
+
+    const result = await pool.query(clientsQuery);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener clientes:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ➕ POST: Crear o editar cliente
+app.post('/api/clientes', async (req, res) => {
+  try {
+    const { id, name, company, phone, dni_cuit, address, email, notes } = req.body;
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'El nombre del cliente es obligatorio.' });
+    }
+
+    if (id) {
+      // Actualizar
+      const q = `
+        UPDATE clients 
+        SET name=$1, company=$2, phone=$3, dni_cuit=$4, address=$5, email=$6, notes=$7 
+        WHERE id=$8 RETURNING *;
+      `;
+      const r = await pool.query(q, [name, company, phone, dni_cuit, address, email, notes, id]);
+      return res.json(r.rows[0]);
+    } else {
+      // Insertar
+      const q = `
+        INSERT INTO clients (name, company, phone, dni_cuit, address, email, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+      `;
+      const r = await pool.query(q, [name, company, phone, dni_cuit, address, email, notes]);
+      return res.json(r.rows[0]);
+    }
+  } catch (err) {
+    console.error('Error al guardar cliente:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 📜 GET: Obtener la cuenta detallada de un cliente
+app.get('/api/clientes/:id/cuenta', async (req, res) => {
+  try {
+    const clientId = req.params.id;
+
+    // 1. Obtener datos del cliente
+    const clientRes = await pool.query('SELECT * FROM clients WHERE id = $1', [clientId]);
+    if (clientRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    const client = clientRes.rows[0];
+    const clientName = (client.name || '').trim();
+    const clientCompany = (client.company || '').trim();
+
+    // Título dinámico para el modal
+    const nombreMostrar = clientCompany !== '' ? clientCompany : clientName;
+
+    // 2. Obtener órdenes asociadas por ID, Nombre o Empresa (con coincidencias flexibles)
+    const ordersRes = await pool.query(
+      `SELECT id, created_at, total_price 
+       FROM work_orders 
+       WHERE client_id = $1 
+          OR ($2 != '' AND LOWER(TRIM(client_name)) = LOWER($2))
+          OR ($3 != '' AND LOWER(TRIM(client_name)) = LOWER($3))
+          OR ($3 != '' AND LENGTH($3) >= 3 AND (client_name ILIKE CONCAT('%', $3, '%') OR $3 ILIKE CONCAT('%', client_name, '%')))
+          OR ($2 != '' AND LENGTH($2) >= 3 AND (client_name ILIKE CONCAT('%', $2, '%') OR $2 ILIKE CONCAT('%', client_name, '%')))
+       ORDER BY created_at ASC`,
+      [clientId, clientName, clientCompany]
+    );
+
+    // 3. Obtener pagos del cliente (incluyendo el ID único del pago para permitir edición)
+    const paymentsRes = await pool.query(
+      `SELECT id AS pago_id, work_order_id, created_at, amount, payment_method, notes 
+       FROM client_payments 
+       WHERE client_id = $1 
+       ORDER BY created_at ASC`,
+      [clientId]
+    );
+
+    let movimientos = [];
+
+    // 4. Calcular importes de las órdenes
+    for (const ord of ordersRes.rows) {
+      let importe = parseFloat(ord.total_price || 0);
+
+      if (importe === 0) {
+        const itemsRes = await pool.query(
+          `SELECT i.width_cm, i.height_cm, i.copies, i.area_m2, i.unit_price_override, m.name AS material_name, pr.price_per_m2
+           FROM work_order_items i
+           LEFT JOIN materials m ON i.material_id = m.id
+           LEFT JOIN pricing_rules pr ON (pr.material_id = i.material_id AND pr.print_type_id = i.print_type_id)
+           WHERE i.work_order_id = $1`,
+          [ord.id]
+        );
+
+        itemsRes.rows.forEach(item => {
+          const ancho = parseFloat(item.width_cm || 0);
+          const alto = parseFloat(item.height_cm || 0);
+          const copias = parseInt(item.copies || 1);
+          const precioUnitario = parseFloat(item.unit_price_override || item.price_per_m2 || 0);
+
+          const matLower = (item.material_name || '').toLowerCase();
+          const esUnitario = matLower.includes('fly banner') || matLower.includes('roll up') || matLower.includes('portabanner') || matLower.includes('sublimado') || matLower.includes('base cruz') || matLower.includes('contrapeso') || matLower.includes('cartel c');
+
+          if (esUnitario) {
+            importe += precioUnitario * copias;
+          } else {
+            const m2 = parseFloat(item.area_m2 || 0) || ((ancho / 100) * (alto / 100));
+            importe += (m2 > 0 ? m2 : 1) * precioUnitario * copias;
+          }
+        });
+      }
+
+      movimientos.push({
+        fecha: ord.created_at,
+        orden_id: ord.id,
+        tipo: 'ORDEN',
+        importe: importe,
+        metodo: '-',
+        pago: 0
+      });
+    }
+
+    // 5. Agregar pagos vinculando el ID único del pago
+    paymentsRes.rows.forEach(p => {
+      movimientos.push({
+        pago_id: p.pago_id, // 👈 Se preserva el ID del pago
+        fecha: p.created_at,
+        orden_id: p.work_order_id,
+        tipo: 'PAGO',
+        importe: 0,
+        metodo: p.payment_method || 'EFECTIVO',
+        pago: parseFloat(p.amount || 0)
+      });
+    });
+
+    // 6. Ordenar movimientos cronológicamente
+    movimientos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+    // 7. Calcular saldo acumulado y armar respuesta final
+    let saldoAcumulado = 0;
+    const tablaCuenta = movimientos.map(m => {
+      saldoAcumulado = saldoAcumulado - m.importe + m.pago;
+
+      return {
+        pago_id: m.pago_id || null, // 👈 Se envía al cliente
+        fecha: new Date(m.fecha).toLocaleDateString('es-AR') + ' ' + new Date(m.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+        num_orden: m.orden_id ? `OT #${m.orden_id}` : '-',
+        orden_id_raw: m.orden_id,
+        tipo: m.tipo,
+        importe: m.importe,
+        metodo: m.metodo,
+        pagos: m.pago,
+        total_saldo: saldoAcumulado
+      };
+    });
+
+    res.json({
+      cliente: {
+        ...client,
+        displayName: nombreMostrar
+      },
+      saldo_final: saldoAcumulado,
+      movimientos: tablaCuenta
+    });
+  } catch (err) {
+    console.error('Error al obtener cuenta del cliente:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 💵 POST: Registrar un nuevo pago de cliente y sincronizar con la Caja Diaria
+app.post('/api/clientes/pagos', async (req, res) => {
+  const clienteId = req.body.cliente_id || req.body.client_id;
+  const ordenId = req.body.orden_id || req.body.work_order_id || null;
+  const montoVal = parseFloat(req.body.monto || req.body.amount || 0);
+  const metodoPago = req.body.metodo_pago || req.body.payment_method || 'EFECTIVO';
+  const notasText = req.body.notas || req.body.notes || '';
+
+  if (!clienteId || isNaN(montoVal) || montoVal <= 0) {
+    return res.status(400).json({ error: 'El ID de cliente y el monto deben ser válidos.' });
+  }
+
+  try {
+    // 1. Guardar el pago en la cuenta del cliente
+    const pagoRes = await pool.query(
+      `INSERT INTO client_payments (client_id, work_order_id, amount, payment_method, notes, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW()) 
+       RETURNING id`,
+      [clienteId, ordenId, montoVal, metodoPago, notasText]
+    );
+
+    const pagoId = pagoRes.rows[0].id;
+
+    // 2. Registrar AUTOMÁTICAMENTE en la Caja Diaria vinculando el client_payment_id
+    try {
+      const clienteRes = await pool.query('SELECT name, company FROM clients WHERE id = $1', [clienteId]);
+      const clientObj = clienteRes.rows[0] || {};
+      const nombreCliente = (clientObj.company && clientObj.company.trim() !== '') 
+        ? clientObj.company 
+        : (clientObj.name || 'Cliente Varios');
+      
+      const detalleCaja = ordenId 
+        ? `Cobro OT #${ordenId} - ${nombreCliente}` 
+        : `Pago a cuenta - ${nombreCliente}`;
+
+      // Obtener ID de la caja abierta hoy
+      const cajaRes = await pool.query(
+        `SELECT id FROM daily_cash WHERE status = 'OPEN' ORDER BY id DESC LIMIT 1`
+      );
+      const dailyCashId = cajaRes.rows[0]?.id || null;
+
+      // Insertar en cash_movements enlazando el ID del pago
+      await pool.query(
+        `INSERT INTO cash_movements (daily_cash_id, client_payment_id, type, amount, payment_method, description, created_at)
+         VALUES ($1, $2, 'INCOME', $3, $4, $5, NOW())`,
+        [dailyCashId, pagoId, montoVal, metodoPago, detalleCaja]
+      );
+
+      console.log('✅ Ingreso registrado con éxito en la caja diaria (vínculo creado)');
+
+    } catch (errCaja) {
+      console.error('❌ Error al intentar registrar en la caja:', errCaja.message);
+    }
+
+    res.json({ success: true, message: 'Pago registrado correctamente.' });
+
+  } catch (error) {
+    console.error('❌ Error general al registrar pago:', error);
+    res.status(500).json({ error: error.message || 'Fallo al procesar el pago' });
+  }
+});
+
+
+// ✏️ PUT: Actualizar un pago existente por ID (Sincronizado con la Caja)
+app.put('/api/clientes/pagos/:id', async (req, res) => {
+  const { id } = req.params;
+
+  // Soportar nombres de campos tanto en español como en inglés
+  const montoVal = parseFloat(req.body.monto || req.body.amount || 0);
+  const metodoPago = req.body.metodo_pago || req.body.payment_method || 'EFECTIVO';
+  const notasText = req.body.notas || req.body.notes || '';
+
+  if (isNaN(montoVal) || montoVal <= 0) {
+    return res.status(400).json({ error: 'El monto debe ser un número mayor a 0.' });
+  }
+
+  try {
+    // 1. Actualizar en la cuenta del cliente (client_payments)
+    const result = await pool.query(
+      `UPDATE client_payments 
+       SET amount = $1, payment_method = $2, notes = $3 
+       WHERE id = $4 
+       RETURNING *`,
+      [montoVal, metodoPago, notasText, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Pago no encontrado.' });
+    }
+
+    // 2. Actualizar automáticamente en la Caja Diaria (cash_movements)
+    try {
+      await pool.query(
+        `UPDATE cash_movements 
+         SET amount = $1, payment_method = $2 
+         WHERE client_payment_id = $3`,
+        [montoVal, metodoPago, id]
+      );
+      console.log('✅ Movimiento de caja actualizado en sincronía.');
+    } catch (errCaja) {
+      console.warn('⚠️ Se actualizó el pago pero hubo un detalle en caja:', errCaja.message);
+    }
+
+    res.json({ message: 'Pago y caja actualizados correctamente', pago: result.rows[0] });
+
+  } catch (err) {
+    console.error('❌ Error al actualizar pago:', err);
+    res.status(500).json({ error: err.message || 'Error al actualizar el pago' });
+  }
+});
+
+
+// ✏️ PUT: Actualizar datos de un cliente existente
+app.put('/api/clientes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { company, name, phone, dni_cuit, address, email, notes } = req.body;
+
+    const result = await pool.query(
+      `UPDATE clients 
+       SET company = $1, name = $2, phone = $3, dni_cuit = $4, address = $5, email = $6, notes = $7 
+       WHERE id = $8 
+       RETURNING *`,
+      [company || '', name || '', phone || '', dni_cuit || '', address || '', email || '', notes || '', id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    res.json({ message: 'Cliente actualizado correctamente', cliente: result.rows[0] });
+  } catch (err) {
+    console.error('Error al actualizar cliente:', err);
     res.status(500).json({ error: err.message });
   }
 });
