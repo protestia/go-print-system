@@ -1090,10 +1090,21 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
     for (const ord of ordersRes.rows) {
       let importe = 0;
 
-      // Consultar los ítems asociados a la orden
+      // Consultar ítems con fallback de precio si no existe la combinación con print_type_id
       const itemsRes = await pool.query(
-        `SELECT i.width_cm, i.height_cm, i.copies, i.area_m2, i.unit_price_override, 
-                m.name AS material_name, pr.price_per_m2
+        `SELECT 
+            i.width_cm, 
+            i.height_cm, 
+            i.copies, 
+            i.area_m2, 
+            i.unit_price_override, 
+            m.name AS material_name, 
+            COALESCE(
+              i.unit_price_override,
+              pr.price_per_m2, 
+              (SELECT price_per_m2 FROM pricing_rules WHERE material_id = i.material_id AND price_per_m2 > 0 LIMIT 1),
+              0
+            ) AS price_per_m2
          FROM work_order_items i
          LEFT JOIN materials m ON i.material_id = m.id
          LEFT JOIN pricing_rules pr ON (pr.material_id = i.material_id AND pr.print_type_id = i.print_type_id)
@@ -1108,11 +1119,8 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
           const alto = parseFloat(item.height_cm || 0);
           const copias = parseInt(item.copies || 1);
           
-          // Respetar unit_price_override si existe (incluso si es 0); si es NULL, usar el precio del catálogo
-          const tieneOverride = item.unit_price_override !== null && item.unit_price_override !== undefined && item.unit_price_override !== '';
-          const precioUnitario = tieneOverride 
-            ? parseFloat(item.unit_price_override) 
-            : parseFloat(item.price_per_m2 || 0);
+          // La consulta SQL ya nos devuelve el precio adecuado en price_per_m2
+          const precioUnitario = parseFloat(item.price_per_m2 || 0);
 
           const matLower = (item.material_name || '').toLowerCase().trim();
 
@@ -1135,7 +1143,6 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
             const m2Calculado = (ancho / 100.0) * (alto / 100.0);
             const m2Final = m2Calculado > 0 ? m2Calculado : parseFloat(item.area_m2 || 0);
             
-            // Si tiene área o copias, multiplicamos por el precio unitario
             if (m2Final > 0) {
               importe += m2Final * precioUnitario * copias;
             } else {
@@ -1145,7 +1152,7 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
         });
       }
 
-      // Resguardo: si la orden no tenía ítems cargados, usar total_price de la tabla principal
+      // Resguardo: si tras sumar los ítems sigue en 0, usar total_price de la tabla principal
       if (importe === 0 && ord.total_price) {
         importe = parseFloat(ord.total_price || 0);
       }
