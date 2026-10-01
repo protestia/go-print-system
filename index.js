@@ -836,23 +836,62 @@ app.delete('/api/ordenes/:id', async (req, res) => {
 });
 
 // 🗑️ DELETE: Eliminar un pago de la cuenta del cliente
+// 🗑️ DELETE: Eliminar un pago de la cuenta del cliente Y sincronizar con Caja Diaria
 app.delete('/api/clientes/pagos/:id', async (req, res) => {
-  const { id } = req.params;
-
+  const client = await pool.connect();
   try {
-    const deleteRes = await pool.query(
-      'DELETE FROM client_payments WHERE id = $1 RETURNING *',
-      [id]
-    );
+    await client.query('BEGIN');
+    const { id } = req.params;
 
-    if (deleteRes.rowCount === 0) {
+    // 1. Obtener la información del pago ANTES de eliminarlo
+    const pagoRes = await client.query('SELECT * FROM client_payments WHERE id = $1', [id]);
+    if (pagoRes.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'El pago no existe o ya fue eliminado.' });
     }
+    const pago = pagoRes.rows[0];
 
-    res.json({ success: true, message: 'Pago eliminado con éxito.' });
+    // 2. Eliminar el pago de la cuenta del cliente
+    await client.query('DELETE FROM client_payments WHERE id = $1', [id]);
+
+    // 3. Obtener la caja abierta del día
+    const cajaRes = await client.query(
+      "SELECT id FROM daily_cash WHERE status = 'OPEN' ORDER BY id DESC LIMIT 1"
+    );
+
+    if (cajaRes.rows.length > 0) {
+      const dailyCashId = cajaRes.rows[0].id;
+
+      // 4. Buscar y eliminar el movimiento correspondiente en la caja diaria
+      const movRes = await client.query(
+        `DELETE FROM cash_movements 
+         WHERE daily_cash_id = $1 
+           AND amount = $2 
+           AND payment_method = $3 
+           AND (created_at::date = $4::date OR created_at >= NOW() - INTERVAL '1 day')
+         RETURNING id`,
+        [dailyCashId, pago.amount, pago.payment_method, pago.created_at]
+      );
+
+      // 5. Si existía el movimiento en la caja, descontarlo del acumulado
+      if (movRes.rows.length > 0) {
+        await client.query(
+          `UPDATE daily_cash 
+           SET total_incomes = total_incomes - $1 
+           WHERE id = $2`,
+          [pago.amount, dailyCashId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Pago y movimiento de caja eliminados con éxito.' });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('❌ Error al eliminar pago:', error);
     res.status(500).json({ error: 'Fallo interno al intentar eliminar el pago.' });
+  } finally {
+    client.release();
   }
 });
 
