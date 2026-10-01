@@ -1232,48 +1232,75 @@ async function eliminarOrdenDesdeCuenta(otId, clienteId) {
   }
 }
 
-// Funciones para abrir y procesar el modal de pago directo
+// 1. Abrir Modal para Registrar un Pago Nuevo o Editar uno Existente
 function abrirModalPagoDirecto(clientId, workOrderId) {
+  document.getElementById('pago-id-hidden').value = '';
   document.getElementById('pago-cliente-id').value = clientId;
   document.getElementById('pago-orden-id').value = workOrderId || '';
   document.getElementById('pago-monto').value = '';
+  document.getElementById('pago-metodo').value = 'EFECTIVO';
   document.getElementById('pago-notas').value = '';
+
+  const btnEliminar = document.getElementById('btn-eliminar-pago');
+  if (btnEliminar) btnEliminar.style.display = 'none';
+
   document.getElementById('modal-registrar-pago-directo').style.display = 'flex';
 }
 
+function abrirModalEditarPago(pagoId, clientId, montoActual, metodoActual) {
+  document.getElementById('pago-id-hidden').value = (pagoId && pagoId !== 'null') ? pagoId : '';
+  document.getElementById('pago-cliente-id').value = clientId;
+  document.getElementById('pago-monto').value = montoActual || '';
+  document.getElementById('pago-metodo').value = metodoActual || 'EFECTIVO';
+  document.getElementById('pago-notas').value = '';
+
+  const btnEliminar = document.getElementById('btn-eliminar-pago');
+  if (btnEliminar) btnEliminar.style.display = 'inline-block';
+
+  document.getElementById('modal-registrar-pago-directo').style.display = 'flex';
+}
+
+// 2. Función Única para Guardar / Actualizar Pago
 async function guardarPagoClienteDirecto(event) {
   event.preventDefault();
 
+  const pagoId = document.getElementById('pago-id-hidden').value;
   const clientId = document.getElementById('pago-cliente-id').value;
-  const workOrderId = document.getElementById('pago-orden-id').value;
+  const workOrderId = document.getElementById('pago-orden-id') ? document.getElementById('pago-orden-id').value : null;
   const amount = parseFloat(document.getElementById('pago-monto').value);
   const paymentMethod = document.getElementById('pago-metodo').value;
-  const notes = document.getElementById('pago-notas').value.trim();
+  const notesInput = document.getElementById('pago-notas');
+  const notes = notesInput ? notesInput.value.trim() : '';
+
+  const esEdicion = pagoId && pagoId !== '' && pagoId !== 'null' && pagoId !== 'undefined';
+  const url = esEdicion ? `/api/clientes/pagos/${pagoId}` : '/api/clientes/pagos';
+  const method = esEdicion ? 'PUT' : 'POST';
 
   try {
-    const res = await fetch('/api/clientes/pagos', {
-      method: 'POST',
+    const res = await fetch(url, {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        client_id: clientId, 
-        work_order_id: workOrderId || null, 
-        amount, 
-        payment_method: paymentMethod, 
-        notes 
+      body: JSON.stringify({
+        client_id: clientId,
+        work_order_id: workOrderId || null,
+        amount,
+        payment_method: paymentMethod,
+        notes
       })
     });
 
     if (res.ok) {
       cerrarModalCliente('modal-registrar-pago-directo');
-      verCuentaCliente(clientId); // Refresca la tabla en caliente
-      if (typeof cargarClientes === 'function') cargarClientes(); // Refresca los saldos de la grilla
+      document.getElementById('pago-id-hidden').value = '';
+      verCuentaCliente(clientId);
+      if (typeof cargarClientes === 'function') cargarClientes();
     } else {
       const err = await res.json();
-      alert("❌ Error al guardar el pago: " + (err.error || "Error de servidor"));
+      alert("❌ Error al procesar el pago: " + (err.error || "Error de servidor"));
     }
   } catch (error) {
-    console.error("Error al registrar pago:", error);
-    alert("❌ Error de conexión al guardar el pago.");
+    console.error("Error al guardar pago:", error);
+    alert("❌ Error de conexión al intentar guardar el pago.");
   }
 }
 
