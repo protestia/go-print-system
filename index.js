@@ -946,66 +946,95 @@ app.post('/api/ordenes/:id/item', async (req, res) => {
   }
 });
 
-// 👥 GET: Obtener todos los clientes con cálculo de saldo y órdenes activas
+// 📜 GET: Obtener todos los clientes con su saldo total actualizado (incluyendo cargos manuales)
 app.get('/api/clientes', async (req, res) => {
   try {
-    const clientsQuery = `
-      SELECT 
-        c.*,
-        COALESCE((
-          SELECT SUM(cp.amount) 
-          FROM client_payments cp 
-          WHERE cp.client_id = c.id
-        ), 0) - COALESCE((
-          SELECT SUM(
-            COALESCE(
-              NULLIF(wo.total_price, 0),
-              (
-                SELECT COALESCE(SUM(
-                  COALESCE(
-                    i.unit_price_override * i.copies,
-                    CASE 
-                      WHEN LOWER(m.name) LIKE '%fly banner%' OR LOWER(m.name) LIKE '%roll up%' OR LOWER(m.name) LIKE '%portabanner%' OR LOWER(m.name) LIKE '%sublimado%' OR LOWER(m.name) LIKE '%base cruz%' OR LOWER(m.name) LIKE '%contrapeso%' OR LOWER(m.name) LIKE '%cartel c%'
-                      THEN pr.price_per_m2 * i.copies
-                      ELSE (i.width_cm / 100.0) * (i.height_cm / 100.0) * pr.price_per_m2 * i.copies
-                    END,
-                    0
-                  )
-                ), 0)
-                FROM work_order_items i
-                LEFT JOIN materials m ON i.material_id = m.id
-                LEFT JOIN pricing_rules pr ON (pr.material_id = i.material_id AND pr.print_type_id = i.print_type_id)
-                WHERE i.work_order_id = wo.id
-              )
-            )
-          )
-          FROM work_orders wo
-          WHERE wo.client_id = c.id 
-             OR (c.name IS NOT NULL AND LENGTH(TRIM(c.name)) >= 3 AND wo.client_name ILIKE CONCAT('%', TRIM(c.name), '%'))
-             OR (c.company IS NOT NULL AND LENGTH(TRIM(c.company)) >= 3 AND (
-                  wo.client_name ILIKE CONCAT('%', TRIM(c.company), '%') OR 
-                  TRIM(c.company) ILIKE CONCAT('%', TRIM(wo.client_name), '%')
-                ))
-        ), 0) AS saldo,
-        (
-          SELECT COUNT(*) 
-          FROM work_orders wo 
-          WHERE (
-            wo.client_id = c.id 
-            OR (c.name IS NOT NULL AND LENGTH(TRIM(c.name)) >= 3 AND wo.client_name ILIKE CONCAT('%', TRIM(c.name), '%'))
-            OR (c.company IS NOT NULL AND LENGTH(TRIM(c.company)) >= 3 AND (
-                 wo.client_name ILIKE CONCAT('%', TRIM(c.company), '%') OR 
-                 TRIM(c.company) ILIKE CONCAT('%', TRIM(wo.client_name), '%')
-               ))
-          )
-          AND (wo.status IS NULL OR wo.status != 'DELIVERED')
-        ) AS ordenes_activas
-      FROM clients c
-      ORDER BY COALESCE(NULLIF(c.company, ''), c.name) ASC;
-    `;
+    const clientesRes = await pool.query('SELECT * FROM clients ORDER BY name ASC');
+    const clientes = clientesRes.rows;
 
-    const result = await pool.query(clientsQuery);
-    res.json(result.rows);
+    for (let c of clientes) {
+      const nombreLimpio = (c.company || c.name || '').replace(/\s+/g, '').toLowerCase();
+
+      // 1. Sumar total de órdenes de trabajo (recalculando desde ítems)
+      const ordersRes = await pool.query(
+        `SELECT wo.id, wo.total_price 
+         FROM work_orders wo 
+         WHERE wo.client_id = $1 
+            OR ($2 != '' AND LOWER(REPLACE(wo.client_name, ' ', '')) LIKE CONCAT('%', $2, '%'))`,
+        [c.id, nombreLimpio]
+      );
+
+      let totalOrdenes = 0;
+      for (const ord of ordersRes.rows) {
+        const itemsRes = await pool.query(
+          `SELECT i.width_cm, i.height_cm, i.copies, i.area_m2, 
+                  m.name AS material_name, 
+                  COALESCE(
+                    i.unit_price_override, 
+                    pr.price_per_m2, 
+                    (SELECT price_per_m2 FROM pricing_rules WHERE material_id = i.material_id AND price_per_m2 > 0 LIMIT 1), 
+                    0
+                  ) AS price_per_m2
+           FROM work_order_items i
+           LEFT JOIN materials m ON i.material_id = m.id
+           LEFT JOIN pricing_rules pr ON (pr.material_id = i.material_id AND pr.print_type_id = i.print_type_id)
+           WHERE i.work_order_id = $1`,
+          [ord.id]
+        );
+
+        let sumItems = 0;
+        itemsRes.rows.forEach(item => {
+          const copias = parseInt(item.copies || 1);
+          const precio = parseFloat(item.price_per_m2 || 0);
+          const matLower = (item.material_name || '').toLowerCase().trim();
+
+          const esUnitario = matLower.includes('fly banner') || matLower.includes('roll up') || 
+                             matLower.includes('portabanner') || matLower.includes('sublimado') || 
+                             matLower.includes('base cruz') || matLower.includes('cruz') || 
+                             matLower.includes('contrapeso') || matLower.includes('cartel c') || 
+                             matLower.includes('polyfam');
+
+          if (esUnitario) {
+            sumItems += precio * copias;
+          } else {
+            const m2Calculado = (parseFloat(item.width_cm || 0) / 100.0) * (parseFloat(item.height_cm || 0) / 100.0);
+            const m2Final = m2Calculado > 0 ? m2Calculado : parseFloat(item.area_m2 || 0);
+            sumItems += (m2Final > 0 ? m2Final : 1) * precio * copias;
+          }
+        });
+
+        totalOrdenes += sumItems > 0 ? sumItems : parseFloat(ord.total_price || 0);
+      }
+
+      // 2. Contar ÓRDENES ACTIVAS (excluyendo entregadas 'DELIVERED' y canceladas 'CANCELLED')
+      const activeOrdersRes = await pool.query(
+        `SELECT COUNT(*) AS total 
+         FROM work_orders 
+         WHERE (client_id = $1 OR ($2 != '' AND LOWER(REPLACE(client_name, ' ', '')) LIKE CONCAT('%', $2, '%')))
+           AND status NOT IN ('DELIVERED', 'CANCELLED')`,
+        [c.id, nombreLimpio]
+      );
+      c.ordenes_activas = parseInt(activeOrdersRes.rows[0].total || 0);
+
+      // 3. Sumar cargos manuales / IVA (Ajustes de saldo)
+      const adjRes = await pool.query(
+        'SELECT COALESCE(SUM(amount), 0) AS total_cargos FROM client_adjustments WHERE client_id = $1',
+        [c.id]
+      );
+      const totalCargos = parseFloat(adjRes.rows[0].total_cargos || 0);
+
+      // 4. Sumar pagos
+      const payRes = await pool.query(
+        'SELECT COALESCE(SUM(amount), 0) AS total_pagos FROM client_payments WHERE client_id = $1',
+        [c.id]
+      );
+      const totalPagos = parseFloat(payRes.rows[0].total_pagos || 0);
+
+      // 5. Saldo total acumulado = Pagos - Órdenes - Cargos Manuales
+      c.saldo = totalPagos - totalOrdenes - totalCargos;
+    }
+
+    res.json(clientes);
   } catch (err) {
     console.error('Error al obtener clientes:', err);
     res.status(500).json({ error: err.message });
@@ -1044,7 +1073,6 @@ app.post('/api/clientes', async (req, res) => {
   }
 });
 
-// 📜 GET: Obtener la cuenta detallada de un cliente
 app.get('/api/clientes/:id/cuenta', async (req, res) => {
   try {
     const clientId = req.params.id;
@@ -1058,24 +1086,22 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
     const client = clientRes.rows[0];
     const clientName = (client.name || '').trim();
     const clientCompany = (client.company || '').trim();
-
-    // Título dinámico para el modal
     const nombreMostrar = clientCompany !== '' ? clientCompany : clientName;
 
-    // 2. Obtener órdenes asociadas por ID, Nombre o Empresa (con coincidencias flexibles)
+    // Normalizar nombres quitando espacios para búsqueda ultra flexible
+    const nombreLimpio = nombreMostrar.replace(/\s+/g, '').toLowerCase();
+
+    // 2. Obtener órdenes asociadas por ID o Nombre flexible (incluso sin espacios)
     const ordersRes = await pool.query(
       `SELECT id, created_at, total_price 
        FROM work_orders 
        WHERE client_id = $1 
-          OR ($2 != '' AND LOWER(TRIM(client_name)) = LOWER($2))
-          OR ($3 != '' AND LOWER(TRIM(client_name)) = LOWER($3))
-          OR ($3 != '' AND LENGTH($3) >= 3 AND (client_name ILIKE CONCAT('%', $3, '%') OR $3 ILIKE CONCAT('%', client_name, '%')))
-          OR ($2 != '' AND LENGTH($2) >= 3 AND (client_name ILIKE CONCAT('%', $2, '%') OR $2 ILIKE CONCAT('%', client_name, '%')))
+          OR ($2 != '' AND LOWER(REPLACE(client_name, ' ', '')) LIKE CONCAT('%', $2, '%'))
        ORDER BY created_at ASC`,
-      [clientId, clientName, clientCompany]
+      [clientId, nombreLimpio]
     );
 
-    // 3. Obtener pagos del cliente (incluyendo el ID único del pago para permitir edición)
+    // 3. Obtener pagos del cliente
     const paymentsRes = await pool.query(
       `SELECT id AS pago_id, work_order_id, created_at, amount, payment_method, notes 
        FROM client_payments 
@@ -1084,13 +1110,36 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
       [clientId]
     );
 
+    // Declarar el arreglo unificado de movimientos
     let movimientos = [];
 
-   // 4. Calcular importes exactos de las órdenes
+    // 4. Obtener cargos manuales / ajustes de saldo (IVA, recargos, etc.)
+    const adjustmentsRes = await pool.query(
+      `SELECT id AS ajuste_id, description, amount, created_at 
+       FROM client_adjustments 
+       WHERE client_id = $1 
+       ORDER BY created_at ASC`,
+      [clientId]
+    );
+
+    // AGREGAR los cargos manuales a la lista de movimientos (SOLO UNA VEZ AQUÍ)
+    adjustmentsRes.rows.forEach(adj => {
+      movimientos.push({
+        ajuste_id: adj.ajuste_id,
+        fecha: adj.created_at,
+        orden_id: null,
+        num_orden: `CARGO (${adj.description})`,
+        tipo: 'CARGO',
+        importe: parseFloat(adj.amount || 0),
+        metodo: '-',
+        pago: 0
+      });
+    });
+
+    // 5. Calcular importes exactos de las órdenes
     for (const ord of ordersRes.rows) {
       let importe = 0;
 
-      // Consultar ítems con fallback de precio si no existe la combinación con print_type_id
       const itemsRes = await pool.query(
         `SELECT 
             i.width_cm, 
@@ -1112,19 +1161,15 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
         [ord.id]
       );
 
-      // Si la orden tiene ítems, sumar el precio real de cada uno
       if (itemsRes.rows.length > 0) {
         itemsRes.rows.forEach(item => {
           const ancho = parseFloat(item.width_cm || 0);
           const alto = parseFloat(item.height_cm || 0);
           const copias = parseInt(item.copies || 1);
-          
-          // La consulta SQL ya nos devuelve el precio adecuado en price_per_m2
           const precioUnitario = parseFloat(item.price_per_m2 || 0);
 
           const matLower = (item.material_name || '').toLowerCase().trim();
 
-          // Lista completa de productos cobrados por UNIDAD
           const esUnitario = matLower.includes('fly banner') || 
                              matLower.includes('roll up') || 
                              matLower.includes('portabanner') || 
@@ -1136,10 +1181,8 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
                              matLower.includes('polyfam');
 
           if (esUnitario) {
-            // Cobro por UNIDAD: Precio * Copias
             importe += precioUnitario * copias;
           } else {
-            // Cobro por M²: Ancho * Alto (en m) * Precio * Copias
             const m2Calculado = (ancho / 100.0) * (alto / 100.0);
             const m2Final = m2Calculado > 0 ? m2Calculado : parseFloat(item.area_m2 || 0);
             
@@ -1152,7 +1195,6 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
         });
       }
 
-      // Resguardo: si tras sumar los ítems sigue en 0, usar total_price de la tabla principal
       if (importe === 0 && ord.total_price) {
         importe = parseFloat(ord.total_price || 0);
       }
@@ -1160,6 +1202,7 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
       movimientos.push({
         fecha: ord.created_at,
         orden_id: ord.id,
+        num_orden: `OT #${ord.id}`,
         tipo: 'ORDEN',
         importe: importe,
         metodo: '-',
@@ -1167,12 +1210,13 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
       });
     }
 
-    // 5. Agregar pagos vinculando el ID único del pago
+    // 6. Agregar pagos
     paymentsRes.rows.forEach(p => {
       movimientos.push({
-        pago_id: p.pago_id, // 👈 Se preserva el ID del pago
+        pago_id: p.pago_id,
         fecha: p.created_at,
         orden_id: p.work_order_id,
+        num_orden: p.work_order_id ? `OT #${p.work_order_id}` : '-',
         tipo: 'PAGO',
         importe: 0,
         metodo: p.payment_method || 'EFECTIVO',
@@ -1180,18 +1224,19 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
       });
     });
 
-    // 6. Ordenar movimientos cronológicamente
+    // 7. Ordenar cronológicamente por fecha
     movimientos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-    // 7. Calcular saldo acumulado y armar respuesta final
+    // 8. Calcular saldo acumulado
     let saldoAcumulado = 0;
     const tablaCuenta = movimientos.map(m => {
       saldoAcumulado = saldoAcumulado - m.importe + m.pago;
 
       return {
-        pago_id: m.pago_id || null, // 👈 Se envía al cliente
+        pago_id: m.pago_id || null,
+        ajuste_id: m.ajuste_id || null,
         fecha: new Date(m.fecha).toLocaleDateString('es-AR') + ' ' + new Date(m.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
-        num_orden: m.orden_id ? `OT #${m.orden_id}` : '-',
+        num_orden: m.num_orden,
         orden_id_raw: m.orden_id,
         tipo: m.tipo,
         importe: m.importe,
@@ -1215,6 +1260,24 @@ app.get('/api/clientes/:id/cuenta', async (req, res) => {
   }
 });
 
+// 🗑️ DELETE: Eliminar un cargo manual por ID
+app.delete('/api/clientes/cargos/:id', async (req, res) => {
+  try {
+    const cargoId = req.params.id;
+
+    if (!cargoId) {
+      return res.status(400).json({ error: 'ID de cargo no válido.' });
+    }
+
+    await pool.query('DELETE FROM client_adjustments WHERE id = $1', [cargoId]);
+
+    res.json({ success: true, message: 'Cargo manual eliminado correctamente.' });
+  } catch (error) {
+    console.error('❌ Error al eliminar cargo manual:', error);
+    res.status(500).json({ error: 'Error interno al eliminar el cargo manual.' });
+  }
+});
+
 // 💵 POST: Registrar un nuevo pago de cliente y sincronizar con la Caja Diaria
 app.post('/api/clientes/pagos', async (req, res) => {
   const clienteId = req.body.cliente_id || req.body.client_id;
@@ -1228,14 +1291,17 @@ app.post('/api/clientes/pagos', async (req, res) => {
   }
 
   try {
-    // 1. Guardar el pago en la cuenta corriente del cliente
-    await pool.query(
+    // 1. Guardar el pago en la cuenta del cliente
+    const pagoRes = await pool.query(
       `INSERT INTO client_payments (client_id, work_order_id, amount, payment_method, notes, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, NOW()) 
+       RETURNING id`,
       [clienteId, ordenId, montoVal, metodoPago, notasText]
     );
 
-    // 2. Registrar AUTOMÁTICAMENTE en la Caja Diaria
+    const pagoId = pagoRes.rows[0].id;
+
+    // 2. Registrar AUTOMÁTICAMENTE en la Caja Diaria vinculando el client_payment_id
     try {
       const clienteRes = await pool.query('SELECT name, company FROM clients WHERE id = $1', [clienteId]);
       const clientObj = clienteRes.rows[0] || {};
@@ -1247,30 +1313,20 @@ app.post('/api/clientes/pagos', async (req, res) => {
         ? `Cobro OT #${ordenId} - ${nombreCliente}` 
         : `Pago a cuenta - ${nombreCliente}`;
 
-      // Obtener caja abierta hoy o crearla automáticamente si estaba cerrada
-      let cajaRes = await pool.query(
+      // Obtener ID de la caja abierta hoy
+      const cajaRes = await pool.query(
         `SELECT id FROM daily_cash WHERE status = 'OPEN' ORDER BY id DESC LIMIT 1`
       );
-      
-      let dailyCashId;
-      if (cajaRes.rows.length === 0) {
-        const nuevaCaja = await pool.query(
-          `INSERT INTO daily_cash (cash_date, total_incomes, total_expenses, closing_balance, status) 
-           VALUES (CURRENT_DATE, 0, 0, 0, 'OPEN') RETURNING id`
-        );
-        dailyCashId = nuevaCaja.rows[0].id;
-      } else {
-        dailyCashId = cajaRes.rows[0].id;
-      }
+      const dailyCashId = cajaRes.rows[0]?.id || null;
 
-      // Insertar en cash_movements usando SOLO las columnas que existen en tu DB
+      // Insertar en cash_movements enlazando el ID del pago
       await pool.query(
-        `INSERT INTO cash_movements (daily_cash_id, type, amount, payment_method, description, created_at)
-         VALUES ($1, 'INCOME', $2, $3, $4, NOW())`,
-        [dailyCashId, montoVal, metodoPago, detalleCaja]
+        `INSERT INTO cash_movements (daily_cash_id, client_payment_id, type, amount, payment_method, description, created_at)
+         VALUES ($1, $2, 'INCOME', $3, $4, $5, NOW())`,
+        [dailyCashId, pagoId, montoVal, metodoPago, detalleCaja]
       );
 
-      console.log('✅ Ingreso registrado con éxito en la caja diaria');
+      console.log('✅ Ingreso registrado con éxito en la caja diaria (vínculo creado)');
 
     } catch (errCaja) {
       console.error('❌ Error al intentar registrar en la caja:', errCaja.message);
@@ -1283,6 +1339,30 @@ app.post('/api/clientes/pagos', async (req, res) => {
     res.status(500).json({ error: error.message || 'Fallo al procesar el pago' });
   }
 });
+
+// ➕ POST: Registrar un cargo/deuda manual en la cuenta del cliente
+app.post('/api/clientes/cargos', async (req, res) => {
+  const { client_id, description, amount } = req.body;
+  const montoVal = parseFloat(amount || 0);
+
+  if (!client_id || !description || isNaN(montoVal) || montoVal <= 0) {
+    return res.status(400).json({ error: 'Debes proporcionar cliente, concepto y un monto válido.' });
+  }
+
+  try {
+    const newCargo = await pool.query(
+      `INSERT INTO client_adjustments (client_id, description, amount, created_at)
+       VALUES ($1, $2, $3, NOW()) RETURNING *`,
+      [client_id, description, montoVal]
+    );
+
+    res.json({ success: true, cargo: newCargo.rows[0] });
+  } catch (error) {
+    console.error('❌ Error al registrar cargo manual:', error);
+    res.status(500).json({ error: 'Error al guardar el cargo manual' });
+  }
+});
+
 
 
 // ✏️ PUT: Actualizar un pago existente por ID (Sincronizado con la Caja)
