@@ -525,9 +525,18 @@
   <div style="background: white; padding: 25px; border-radius: 12px; width: 850px; max-width: 95%; max-height: 90vh; overflow-y: auto;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <h3 id="cuenta-cliente-titulo" style="color: #5b3693; margin: 0;">📜 Estado de Cuenta</h3>
-      <button id="btn-agregar-pago-cliente" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer;">
-        ➕ Registrar Pago
-      </button>
+      
+      <div style="display: flex; gap: 8px;">
+        <!-- ➕ BOTÓN PARA CARGO MANUAL / IVA -->
+        <button onclick="abrirModalCargoManual()" style="background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer;">
+          ➕ Cargo Manual
+        </button>
+
+        <!-- ➕ BOTÓN PARA REGISTRAR PAGO -->
+        <button id="btn-agregar-pago-cliente" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer;">
+          ➕ Registrar Pago
+        </button>
+      </div>
     </div>
 
     <div id="cuenta-cliente-resumen" style="margin-bottom: 15px; padding: 12px; border-radius: 8px; font-weight: bold;"></div>
@@ -693,6 +702,50 @@ setInterval(() => {
         errorDiv.style.display = 'block';
       }
     }
+
+    async function abrirModalCargoManual() {
+  // Se obtiene el ID exacto asignado en verCuentaCliente
+  const idCliente = typeof clienteActualIdEnModal !== 'undefined' ? clienteActualIdEnModal : window.clienteActualIdEnModal;
+
+  if (!idCliente) {
+    alert("No se pudo detectar el cliente actual.");
+    return;
+  }
+
+  const concepto = prompt("Ingresa el concepto del cargo (Ej: IVA 21%, Ajuste de saldo, Recargo):");
+  if (!concepto) return;
+
+  const montoStr = prompt("Ingresa el monto a cobrar ($):");
+  const monto = parseFloat(montoStr);
+
+  if (isNaN(monto) || monto <= 0) {
+    alert("Monto inválido.");
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/clientes/cargos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: idCliente,
+        description: concepto,
+        amount: monto
+      })
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      // Recargar la tabla de la cuenta corriente inmediatamente
+      verCuentaCliente(idCliente);
+    } else {
+      alert("Error: " + (data.error || "No se pudo guardar el cargo."));
+    }
+  } catch (err) {
+    console.error("Error al registrar cargo manual:", err);
+    alert("Fallo de conexión al guardar el cargo.");
+  }
+}
 
     async function togglePin(event, otId, isPinned) {
       if (event) event.stopPropagation();
@@ -1083,12 +1136,15 @@ async function verCuentaCliente(id) {
         const botonEditarPago = m.tipo === 'PAGO' ? 
           `<button onclick="abrirModalEditarPago(${m.pago_id || 'null'}, ${id}, ${m.pagos}, '${m.metodo || 'EFECTIVO'}')" title="Editar pago" style="background: transparent; border: none; cursor: pointer; padding: 2px 4px; margin-left: 2px; font-size: 13px;">✏️</button>` : '';
 
-        // ❌ Botón para ELIMINAR al final de la fila
+        // ❌ Botón para ELIMINAR al final de la fila (PAGO, ORDEN o CARGO)
         let botonEliminar = '';
         if (m.tipo === 'PAGO') {
           botonEliminar = `<button onclick="eliminarPagoDirectoCuenta(${m.pago_id}, ${id})" title="Eliminar pago de la cuenta" style="background: transparent; border: none; cursor: pointer; padding: 2px 4px; font-size: 12px; margin-left: 6px;">❌</button>`;
         } else if (m.tipo === 'ORDEN') {
           botonEliminar = `<button onclick="eliminarOrdenDesdeCuenta(${m.orden_id_raw}, ${id})" title="Eliminar orden completa" style="background: transparent; border: none; cursor: pointer; padding: 2px 4px; font-size: 12px; margin-left: 6px;">❌</button>`;
+        } else if (m.tipo === 'CARGO' || m.ajuste_id) {
+          // 👈 AGREGADO: Botón eliminar para cargos manuales / IVA / recargos
+          botonEliminar = `<button onclick="eliminarCargoManual(${m.ajuste_id}, ${id})" title="Eliminar cargo manual" style="background: transparent; border: none; cursor: pointer; padding: 2px 4px; font-size: 12px; margin-left: 6px;">❌</button>`;
         }
 
         tr.innerHTML = `
@@ -1134,6 +1190,27 @@ async function eliminarPagoDirectoCuenta(pagoId, clienteId) {
   } catch (err) {
     console.error("Error al eliminar pago:", err);
     alert("❌ Error de conexión al intentar eliminar.");
+  }
+}
+
+async function eliminarCargoManual(ajusteId, clienteId) {
+  if (!confirm("¿Estás seguro de que deseas eliminar este cargo manual?")) return;
+
+  try {
+    const res = await fetch(`/api/clientes/cargos/${ajusteId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      verCuentaCliente(clienteId); // Recargar el estado de cuenta
+      if (typeof cargarClientes === 'function') cargarClientes(); // Recargar las tarjetas principales de los clientes
+    } else {
+      alert("Error: " + (data.error || "No se pudo eliminar el cargo."));
+    }
+  } catch (err) {
+    console.error("Error al eliminar cargo manual:", err);
+    alert("Fallo de conexión al intentar eliminar el cargo.");
   }
 }
 
