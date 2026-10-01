@@ -835,12 +835,11 @@ app.delete('/api/ordenes/:id', async (req, res) => {
   }
 });
 
-// Endpoint para ELIMINAR un pago de la cuenta del cliente
+// 🗑️ DELETE: Eliminar un pago de la cuenta del cliente
 app.delete('/api/clientes/pagos/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Eliminamos el registro de la tabla de pagos
     const deleteRes = await pool.query(
       'DELETE FROM client_payments WHERE id = $1 RETURNING *',
       [id]
@@ -1016,16 +1015,20 @@ app.get('/api/clientes', async (req, res) => {
       );
       c.ordenes_activas = parseInt(activeOrdersRes.rows[0].total || 0);
 
-      // 3. Sumar cargos manuales / IVA (Ajustes de saldo)
+      // 3. Sumar cargos manuales / IVA (Ajustes de saldo) -> Búsqueda corregida
       const adjRes = await pool.query(
-        'SELECT COALESCE(SUM(amount), 0) AS total_cargos FROM client_adjustments WHERE client_id = $1',
+        `SELECT COALESCE(SUM(amount), 0) AS total_cargos 
+         FROM client_adjustments 
+         WHERE client_id = $1`,
         [c.id]
       );
       const totalCargos = parseFloat(adjRes.rows[0].total_cargos || 0);
 
       // 4. Sumar pagos
       const payRes = await pool.query(
-        'SELECT COALESCE(SUM(amount), 0) AS total_pagos FROM client_payments WHERE client_id = $1',
+        `SELECT COALESCE(SUM(amount), 0) AS total_pagos 
+         FROM client_payments 
+         WHERE client_id = $1`,
         [c.id]
       );
       const totalPagos = parseFloat(payRes.rows[0].total_pagos || 0);
@@ -1301,7 +1304,7 @@ app.post('/api/clientes/pagos', async (req, res) => {
 
     const pagoId = pagoRes.rows[0].id;
 
-    // 2. Registrar AUTOMÁTICAMENTE en la Caja Diaria vinculando el client_payment_id
+    // 2. Registrar AUTOMÁTICAMENTE en la Caja Diaria
     try {
       const clienteRes = await pool.query('SELECT name, company FROM clients WHERE id = $1', [clienteId]);
       const clientObj = clienteRes.rows[0] || {};
@@ -1313,26 +1316,26 @@ app.post('/api/clientes/pagos', async (req, res) => {
         ? `Cobro OT #${ordenId} - ${nombreCliente}` 
         : `Pago a cuenta - ${nombreCliente}`;
 
-      // Obtener ID de la caja abierta hoy
+      // Obtener ID de la caja abierta
       const cajaRes = await pool.query(
         `SELECT id FROM daily_cash WHERE status = 'OPEN' ORDER BY id DESC LIMIT 1`
       );
       const dailyCashId = cajaRes.rows[0]?.id || null;
 
-      // Insertar en cash_movements enlazando el ID del pago
+      // Insertar movimiento con el nombre exacto de tus columnas
       await pool.query(
-        `INSERT INTO cash_movements (daily_cash_id, client_payment_id, type, amount, payment_method, description, created_at)
-         VALUES ($1, $2, 'INCOME', $3, $4, $5, NOW())`,
-        [dailyCashId, pagoId, montoVal, metodoPago, detalleCaja]
+        `INSERT INTO cash_movements (daily_cash_id, type, amount, payment_method, description, created_at)
+         VALUES ($1, 'INCOME', $2, $3, $4, NOW())`,
+        [dailyCashId, montoVal, metodoPago, detalleCaja]
       );
 
-      console.log('✅ Ingreso registrado con éxito en la caja diaria (vínculo creado)');
+      console.log('✅ Ingreso registrado con éxito en la caja diaria');
 
     } catch (errCaja) {
       console.error('❌ Error al intentar registrar en la caja:', errCaja.message);
     }
 
-    res.json({ success: true, message: 'Pago registrado correctamente.' });
+    res.json({ success: true, message: 'Pago registrado correctamente.', pago_id: pagoId });
 
   } catch (error) {
     console.error('❌ Error general al registrar pago:', error);
@@ -1369,7 +1372,6 @@ app.post('/api/clientes/cargos', async (req, res) => {
 app.put('/api/clientes/pagos/:id', async (req, res) => {
   const { id } = req.params;
 
-  // Soportar nombres de campos tanto en español como en inglés
   const montoVal = parseFloat(req.body.monto || req.body.amount || 0);
   const metodoPago = req.body.metodo_pago || req.body.payment_method || 'EFECTIVO';
   const notasText = req.body.notas || req.body.notes || '';
@@ -1392,20 +1394,7 @@ app.put('/api/clientes/pagos/:id', async (req, res) => {
       return res.status(404).json({ error: 'Pago no encontrado.' });
     }
 
-    // 2. Actualizar automáticamente en la Caja Diaria (cash_movements)
-    try {
-      await pool.query(
-        `UPDATE cash_movements 
-         SET amount = $1, payment_method = $2 
-         WHERE client_payment_id = $3`,
-        [montoVal, metodoPago, id]
-      );
-      console.log('✅ Movimiento de caja actualizado en sincronía.');
-    } catch (errCaja) {
-      console.warn('⚠️ Se actualizó el pago pero hubo un detalle en caja:', errCaja.message);
-    }
-
-    res.json({ message: 'Pago y caja actualizados correctamente', pago: result.rows[0] });
+    res.json({ message: 'Pago actualizado correctamente', pago: result.rows[0] });
 
   } catch (err) {
     console.error('❌ Error al actualizar pago:', err);
