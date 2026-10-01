@@ -3,24 +3,23 @@ const router = express.Router();
 
 module.exports = (pool) => {
 
-  // GET: Obtener movimientos y estado de la caja de hoy (Corregido con Zona Horaria)
+  // GET: Obtener movimientos y estado de la caja de hoy
   router.get('/hoy', async (req, res) => {
     try {
       // 🔒 AUTO-CIERRE: Cerrar automáticamente cajas de días anteriores que quedaron abiertas
       await pool.query(
         `UPDATE daily_cash 
          SET status = 'CLOSED', closed_at = NOW() 
-         WHERE status = 'OPEN' AND cash_date::date < CURRENT_DATE`
+         WHERE status = 'OPEN' AND cash_date::date < (NOW() AT TIME ZONE 'America/Argentina/Cordoba')::date`
       );
 
-      // Fecha local (YYYY-MM-DD)
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const today = `${year}-${month}-${day}`;
+      // Fecha local explícita de Córdoba/Argentina (YYYY-MM-DD)
+      const dateRes = await pool.query(
+        `SELECT (NOW() AT TIME ZONE 'America/Argentina/Cordoba')::date::text as today`
+      );
+      const today = dateRes.rows[0].today;
       
-      // Búsqueda directa por tipo DATE en PostgreSQL (evita fallos de LIKE en timestamps)
+      // Búsqueda directa por tipo DATE en PostgreSQL
       let cashRes = await pool.query(
         'SELECT * FROM daily_cash WHERE cash_date::date = $1::date ORDER BY id DESC LIMIT 1', 
         [today]
@@ -34,13 +33,12 @@ module.exports = (pool) => {
       }
       let dailyCash = cashRes.rows[0];
 
-      // Traer movimientos asegurando el ID de caja O contemplando la fecha en la zona horaria de la DB
+      // Traer únicamente los movimientos asociados a esta caja
       const movementsRes = await pool.query(
         `SELECT * FROM cash_movements 
          WHERE daily_cash_id = $1 
-            OR (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Cordoba')::date = $2::date 
          ORDER BY created_at DESC`,
-        [dailyCash.id, today]
+        [dailyCash.id]
       );
 
       // Recalcular en vivo los totales de Ingresos y Egresos
@@ -74,7 +72,7 @@ module.exports = (pool) => {
     }
   });
 
-  // GET: Obtener movimientos y totales de una caja especifica por ID (Histórica / Cerrada)
+  // GET: Obtener detalle de una caja especifica por ID
   router.get('/detalle/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -87,9 +85,9 @@ module.exports = (pool) => {
 
       const movementsRes = await pool.query(
         `SELECT * FROM cash_movements 
-         WHERE daily_cash_id = $1 OR created_at::date = $2::date 
+         WHERE daily_cash_id = $1 
          ORDER BY created_at ASC`,
-        [dailyCash.id, dailyCash.cash_date]
+        [dailyCash.id]
       );
 
       res.json({
@@ -126,23 +124,33 @@ module.exports = (pool) => {
     }
   });
 
-  // POST: Cerrar la caja del día
+  // POST: Cerrar la caja del día (Con cálculo automático en vivo)
   router.post('/cerrar', async (req, res) => {
     try {
       const { daily_cash_id } = req.body;
       
-      const cashRes = await pool.query('SELECT * FROM daily_cash WHERE id = $1', [daily_cash_id]);
-      if (cashRes.rows.length === 0) return res.status(404).json({ error: 'Caja no encontrada' });
-      
-      const cash = cashRes.rows[0];
-      const balance = parseFloat(cash.total_incomes) - parseFloat(cash.total_expenses);
+      // Obtener la suma real acumulada de los movimientos
+      const sumRes = await pool.query(
+        `SELECT 
+          COALESCE(SUM(CASE WHEN type IN ('INCOME', 'INGRESO') THEN amount ELSE 0 END), 0) as incomes,
+          COALESCE(SUM(CASE WHEN type IN ('EXPENSE', 'EGRESO') THEN amount ELSE 0 END), 0) as expenses
+         FROM cash_movements 
+         WHERE daily_cash_id = $1`,
+        [daily_cash_id]
+      );
+
+      const incomes = parseFloat(sumRes.rows[0].incomes);
+      const expenses = parseFloat(sumRes.rows[0].expenses);
+      const balance = incomes - expenses;
 
       const updated = await pool.query(
         `UPDATE daily_cash 
-         SET status = 'CLOSED', closing_balance = $1, closed_at = NOW() 
-         WHERE id = $2 RETURNING *`,
-        [balance, daily_cash_id]
+         SET status = 'CLOSED', total_incomes = $1, total_expenses = $2, closing_balance = $3, closed_at = NOW() 
+         WHERE id = $4 RETURNING *`,
+        [incomes, expenses, balance, daily_cash_id]
       );
+
+      if (updated.rows.length === 0) return res.status(404).json({ error: 'Caja no encontrada' });
 
       res.json(updated.rows[0]);
     } catch (err) {
@@ -151,7 +159,7 @@ module.exports = (pool) => {
     }
   });
 
-  // GET: Resumen Mensual (Incluye 'id' para poder consultar el detalle)
+  // GET: Resumen Mensual
   router.get('/mensual/:anio/:mes', async (req, res) => {
     try {
       const { anio, mes } = req.params;
