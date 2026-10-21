@@ -224,13 +224,22 @@ async function cargarResumenMensual() {
       const [a, m, d] = fechaStr.split('-');
       const fecha = fechaStr ? `${d}/${m}/${a}` : '-';
 
+      const ingresos = parseFloat(c.total_incomes || 0);
+      const egresos = parseFloat(c.total_expenses || 0);
+      
+      // 💡 Red de seguridad: oiméramo closing_balance oĩ 0-pe ha caja oñembotyma, oipapa (ingresos - egresos)
+      let saldoCierre = parseFloat(c.closing_balance || 0);
+      if (saldoCierre === 0 && c.status === 'CLOSED') {
+        saldoCierre = ingresos - egresos;
+      }
+
       const tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid #e2e8f0';
       tr.innerHTML = `
         <td style="padding: 10px;">${fecha}</td>
-        <td style="padding: 10px; color: #10b981; font-weight: bold;">$${parseFloat(c.total_incomes || 0).toLocaleString('es-AR')}</td>
-        <td style="padding: 10px; color: #ef4444; font-weight: bold;">$${parseFloat(c.total_expenses || 0).toLocaleString('es-AR')}</td>
-        <td style="padding: 10px; font-weight: bold;">$${parseFloat(c.closing_balance || 0).toLocaleString('es-AR')}</td>
+        <td style="padding: 10px; color: #10b981; font-weight: bold;">$${ingresos.toLocaleString('es-AR')}</td>
+        <td style="padding: 10px; color: #ef4444; font-weight: bold;">$${egresos.toLocaleString('es-AR')}</td>
+        <td style="padding: 10px; font-weight: bold;">$${saldoCierre.toLocaleString('es-AR')}</td>
         <td style="padding: 10px;">${c.status === 'CLOSED' ? '🔴 Cerrada' : '🟢 Abierta'}</td>
       `;
       tbody.appendChild(tr);
