@@ -25,22 +25,23 @@ module.exports = (pool) => {
       const countRes = await pool.query(countQuery, search !== '' ? [`%${search}%`] : []);
       const totalClientes = parseInt(countRes.rows[0].count);
 
-      let query = `
-        SELECT c.*, 
-          COALESCE(
-            (SELECT SUM(cp.amount) FROM client_payments cp WHERE cp.client_id = c.id), 0
-          ) - COALESCE(
-            (SELECT SUM(wo.total_price) FROM work_orders wo WHERE wo.client_id = c.id OR wo.client_name ILIKE c.company OR wo.client_name ILIKE c.name), 0
-          ) - COALESCE(
-            (SELECT SUM(ca.amount) FROM client_adjustments ca WHERE ca.client_id = c.id), 0
-          ) AS saldo,
-          COALESCE(
-            (SELECT COUNT(*) FROM work_orders wo WHERE (wo.client_id = c.id OR wo.client_name ILIKE c.company OR wo.client_name ILIKE c.name) AND wo.status != 'DELIVERED'), 0
-          ) AS active_orders
-        FROM clients c
-        ${searchCondition}
-        ORDER BY c.id DESC
-      `;
+      // ✅ CÓDIGO CORREGIDO (Comparación estricta de igualdad):
+let query = `
+  SELECT c.*, 
+    COALESCE(
+      (SELECT SUM(cp.amount) FROM client_payments cp WHERE cp.client_id = c.id), 0
+    ) - COALESCE(
+      (SELECT SUM(wo.total_price) FROM work_orders wo WHERE wo.client_id = c.id OR LOWER(TRIM(wo.client_name)) = LOWER(TRIM(c.company)) OR LOWER(TRIM(wo.client_name)) = LOWER(TRIM(c.name))), 0
+    ) - COALESCE(
+      (SELECT SUM(ca.amount) FROM client_adjustments ca WHERE ca.client_id = c.id), 0
+    ) AS saldo,
+    COALESCE(
+      (SELECT COUNT(*) FROM work_orders wo WHERE (wo.client_id = c.id OR LOWER(TRIM(wo.client_name)) = LOWER(TRIM(c.company)) OR LOWER(TRIM(wo.client_name)) = LOWER(TRIM(c.name))) AND wo.status != 'DELIVERED'), 0
+    ) AS active_orders
+  FROM clients c
+  ${searchCondition}
+  ORDER BY c.id DESC
+`;
 
       if (!traerTodos) {
         queryParams.push(limit, offset);
