@@ -431,21 +431,36 @@ function descargarEstadoCuentaPDF() {
   window.print();
 }
 
+// ✅ CÓDIGO CORREGIDO:
 function irAOrdenDesdeCuenta(otNumero, status) {
   cerrarModalCliente('modal-cuenta-cliente');
 
+  // Normalizar el estado para asegurar que caiga en la sección correcta
+  const st = (status || '').toUpperCase();
   let seccionDestino = 'diseno';
-  if (status === 'READY_TO_PRINT') seccionDestino = 'impresion';
-  else if (status === 'READY_TO_DELIVER') seccionDestino = 'entrega';
-  else if (status === 'DELIVERED') seccionDestino = 'historial';
+
+  if (st === 'READY_TO_PRINT' || st === 'IMPRESION') {
+    seccionDestino = 'impresion';
+  } else if (st === 'READY_TO_DELIVER' || st === 'ENTREGA') {
+    seccionDestino = 'entrega';
+  } else if (st === 'DELIVERED' || st === 'ENTREGADO' || st === 'HISTORIAL') {
+    seccionDestino = 'historial';
+  }
 
   cargarSeccion(seccionDestino);
   
   setTimeout(() => {
     const inputBuscar = document.getElementById('input-buscar');
     if (inputBuscar) {
-      inputBuscar.value = `OT #${otNumero}`;
-      filtrarOrdenes();
+      // 1. Escribimos únicamente el número puro (ej: "55580")
+      inputBuscar.value = otNumero;
+      
+      // 2. Disparamos la función de filtrado si existe
+      if (typeof filtrarOrdenes === 'function') {
+        filtrarOrdenes();
+      } else if (typeof cargarOrdenes === 'function') {
+        cargarOrdenes(1, otNumero);
+      }
     }
   }, 300);
 }
