@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Go Print</title>
+
+  <!-- Favicon / Icono de la pestaña -->
+  <link rel="icon" type="image/png" href="/public/Imagenes/logo.png">
+  <!-- Hoja de estilos principal -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+  <!-- PANTALLA DE LOGIN -->
+  <div id="login-screen">
+    <div class="login-card">
+      <h2>Go Print - Acceso</h2>
+      <form onsubmit="realizarLogin(event); return false;">
+        <input type="text" id="login-user" class="login-input" placeholder="Usuario" required autocomplete="username">
+        <input type="password" id="login-pass" class="login-input" placeholder="Contraseña" required autocomplete="current-password">
+        <button type="submit" class="login-btn">Ingresar al Sistema</button>
+        <div id="login-error" class="login-error" style="color: #ef4444; font-size: 0.85rem; margin-top: 10px; display: none;"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- APLICACIÓN PRINCIPAL -->
+  <div id="app-container" style="display: none; width: 100%; height: 100vh;">
+    <div class="sidebar">
+      <div class="brand-container">
+        <img src="/public/Imagenes/logo.png" alt="Go Print Logo" class="brand-logo">
+      </div>
+
+      <h2>PANEL DE CONTROL</h2>
+      <div class="menu">
+        <div class="menu-item active" id="btn-diseno" onclick="cargarSeccion('diseno')">🎨 DISEÑO</div>
+        <div class="menu-item" id="btn-impresion" onclick="cargarSeccion('impresion')">🖨️ IMPRESIÓN</div>
+        <div class="menu-item" id="btn-entrega" onclick="cargarSeccion('entrega')">📦 ENTREGA</div>
+        <div class="menu-item" id="btn-historial" onclick="cargarSeccion('historial')">📚 HISTORIAL</div>
+        <div class="menu-item" id="btn-precios" onclick="cargarSeccion('precios')">🏷️ LISTA DE PRECIOS</div>
+        <div class="menu-item" id="btn-caja" onclick="cargarSeccion('caja')">💰 CAJA</div>
+        <div class="menu-item" id="btn-clientes" onclick="cargarSeccion('clientes')">👥 CLIENTES</div>
+      </div>
+
+      <div class="user-info">
+        <span>👤 <strong id="lbl-username">Admin</strong> (<span id="lbl-role">admin</span>)</span>
+        <button onclick="cerrarSesion()" class="btn-logout">Cerrar Sesión</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="header">
+        <h1 id="seccion-titulo">Área de Diseño 🎨</h1>
+        <!-- 🔍 Barra de Búsqueda de Órdenes (Se oculta en Historial si usas el buscador de tabla propio) -->
+        <input type="text" id="input-buscar" placeholder="🔍 Buscar por cliente o Nº de OT..." oninput="filtrarOrdenes()" style="padding: 10px 15px; width: 300px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.9rem; outline: none; background: white;">
+      </div>
+
+      <!-- 1. VISTA DE ÓRDENES (GRILLA PARA DISEÑO, IMPRESIÓN, ENTREGA) -->
+      <div class="grid" id="orders-container"></div>
+
+      <!-- 1.B. VISTA DE HISTORIAL (TABLA LIMPIA Y PAGINADA) -->
+      <div id="seccion-historial-container" style="display: none; width: 100%;">
+        <div class="header" style="margin-bottom: 20px;">
+          <h2 style="color: #5b3693; margin: 0;">Historial de Órdenes Entregadas</h2>
+          <div class="filter-container">
+            <input type="text" id="input-buscar-historial" class="input-custom" placeholder="Buscar por cliente o N° de OT..." style="width: 250px; padding: 10px 15px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.9rem; outline: none; background: white;">
+          </div>
+        </div>
+        <div class="table-container" style="background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+              <tr style="border-bottom: 2px solid #e2e8f0; color: #5b3693; text-align: left;">
+                <th style="padding: 10px;">Nº OT</th>
+                <th style="padding: 10px;">Cliente</th>
+                <th style="padding: 10px;">Fecha Entrega</th>
+                <th style="padding: 10px; text-align: right;">Total Total</th>
+                <th style="padding: 10px; text-align: center;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-historial-body">
+              <!-- Las filas se inyectan dinámicamente con JS -->
+            </tbody>
+          </table>
+          
+          <!-- Controles de Paginación -->
+          <div id="paginacion-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+            <button id="btn-prev" class="btn" style="background: #e2e8f0; color: #334155;">← Anterior</button>
+            <span id="page-info" style="font-size: 0.85rem; color: #64748b;">Página 1 de 1</span>
+            <button id="btn-next" class="btn" style="background: #5b3693; color: white;">Siguiente →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. VISTA DE LISTA DE PRECIOS -->
+      <div id="seccion-precios" style="display: none; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2 style="color: #5b3693; margin: 0;">📋 Lista de Precios Actuales</h2>
+          <input type="text" id="input-buscar-precio" placeholder="🔍 Buscar material o tecnología..." onkeyup="filtrarMateriales()" style="padding: 10px 16px; width: 320px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none;">
+        </div>
+
+        <div style="background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background-color: #5b3693; color: white; text-align: left;">
+                <th style="padding: 12px 16px;">Material</th>
+                <th style="padding: 12px 16px; text-align: center;">Modelo de Cobro</th>
+                <th style="padding: 12px 16px;">Tecnologías y Precios</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-lista-precios"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3. VISTA DE GESTIÓN DE CAJA -->
+      <div id="seccion-caja" style="display: none; width: 100%;">
+        <div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%;">
+          <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Registrar Movimiento de Caja</h3>
+          <form id="form-caja" onsubmit="registrarMovimientoCaja(event)" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; width: 100%;">
+            <div style="flex: 1; min-width: 140px;">
+              <label style="font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; margin-bottom: 4px;">Tipo:</label>
+              <select id="caja-tipo" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+                <option value="INCOME">🟢 Ingreso</option>
+                <option value="EXPENSE">🔴 Egreso / Gasto</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+              <label style="font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; margin-bottom: 4px;">Monto ($):</label>
+              <input type="number" id="caja-monto" step="0.01" min="0.01" required placeholder="0.00" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            </div>
+            <div style="flex: 1; min-width: 160px;">
+              <label style="font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; margin-bottom: 4px;">Método:</label>
+              <select id="caja-metodo" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="TRANSFERENCIA">Transferencia / Banco</option>
+                <option value="TRANSFERENCIA_SAS">Transferencia / Banco Sas</option>
+                <option value="MERCADO_PAGO">Mercado Pago</option>
+                <option value="NARANJA_X">Naranja X</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="E_CHEQ">E-cheq</option>
+              </select>
+            </div>
+            <div style="flex: 2; min-width: 220px;">
+              <label style="font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; margin-bottom: 4px;">Detalle / Cliente:</label>
+              <input type="text" id="caja-descripcion" placeholder="Ej: Seña Grafica Juani o Compra bifaz" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            </div>
+            <button type="submit" style="background: #10b981; color: white; border: none; padding: 11px 22px; border-radius: 6px; font-weight: bold; cursor: pointer; white-space: nowrap;">+ Cargar</button>
+          </form>
+        </div>
+
+        <div style="display: flex; gap: 15px; margin-bottom: 20px; width: 100%;">
+          <div style="background: white; padding: 15px; border-radius: 10px; flex: 1; text-align: center; border-left: 5px solid #10b981; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h4 style="margin: 0; color: #64748b; font-size: 0.85rem;">Total Ingresos</h4>
+            <p id="caja-total-ingresos" style="font-size: 1.6em; font-weight: bold; color: #10b981; margin: 5px 0 0 0;">$0.00</p>
+          </div>
+          <div style="background: white; padding: 15px; border-radius: 10px; flex: 1; text-align: center; border-left: 5px solid #ef4444; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h4 style="margin: 0; color: #64748b; font-size: 0.85rem;">Total Egresos</h4>
+            <p id="caja-total-egresos" style="font-size: 1.6em; font-weight: bold; color: #ef4444; margin: 5px 0 0 0;">$0.00</p>
+          </div>
+          <div style="background: white; padding: 15px; border-radius: 10px; flex: 1; text-align: center; border-left: 5px solid #5b3693; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h4 style="margin: 0; color: #64748b; font-size: 0.85rem;">Saldo Neto</h4>
+            <p id="caja-saldo-neto" style="font-size: 1.6em; font-weight: bold; color: #5b3693; margin: 5px 0 0 0;">$0.00</p>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; width: 100%;">
+          <h3 style="margin: 0; color: #5b3693;">Movimientos Registrados Hoy</h3>
+          <button id="btn-cerrar-caja" onclick="cerrarCajaDiaria()" style="background: #ef4444; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: bold; cursor: pointer;">🔒 Cerrar Caja del Día</button>
+        </div>
+
+        <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); width: 100%;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+              <tr style="background-color: #5b3693; color: white;">
+                <th style="padding: 12px 15px;">Hora</th>
+                <th style="padding: 12px 15px;">Tipo</th>
+                <th style="padding: 12px 15px;">Monto</th>
+                <th style="padding: 12px 15px;">Método</th>
+                <th style="padding: 12px 15px;">Detalle / Cliente</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-caja-movimientos"></tbody>
+          </table>
+        </div>
+
+        <div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-top: 30px; width: 100%;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #5b3693;">📊 Reporte de Caja Mensual</h3>
+            <div style="display: flex; gap: 10px;">
+              <select id="caja-mes" onchange="cargarResumenMensual()" style="padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+              </select>
+              <input type="number" id="caja-anio" value="2026" onchange="cargarResumenMensual()" style="width: 90px; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+            </div>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+              <tr style="background-color: #341a5c; color: white;">
+                <th style="padding: 10px;">Fecha</th>
+                <th style="padding: 10px;">Ingresos</th>
+                <th style="padding: 10px;">Egresos</th>
+                <th style="padding: 10px;">Saldo Cierre</th>
+                <th style="padding: 10px;">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-caja-mensual"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 4. VISTA DE GESTIÓN DE CLIENTES -->
+      <div id="seccion-clientes" style="display: none; width: 100%;">
+        <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px;">
+          <button onclick="abrirModalNuevoCliente()" style="background: #5b3693; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer;">+ Nuevo Cliente</button>
+        </div>
+        <input type="text" id="buscar-cliente" placeholder="🔍 Buscar por nombre, empresa o celular..." onkeyup="filtrarClientes()" style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.95rem; outline: none; margin-bottom: 20px; background: white;">
+        <div id="grid-clientes" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Botón Flotante para Crear Orden Manual -->
+  <button onclick="abrirModalOrdenManual()" id="btn-floating-manual" class="btn-floating-add" title="Crear Orden Manual" style="display: none;">+</button>
+
+  <!-- MODALES NECESARIOS -->
+  <div id="modal-orden-manual" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+      <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Crear Nueva Orden Manual</h3>
+      <form onsubmit="guardarOrdenManual(event)">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Cliente Registrado:</label>
+          <!-- MODIFICADO: Cambiado de <select> a <input type="text"> con <datalist> para búsqueda en tiempo real -->
+          <input type="text" id="manual-client-input" list="manual-client-list" required placeholder="Escriba para buscar cliente..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; background: white;" autocomplete="off">
+          <datalist id="manual-client-list">
+            <!-- Se llena automáticamente con JavaScript -->
+          </datalist>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Teléfono / Email (Opcional):</label>
+          <input type="text" id="manual-client-email" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. juan@mail.com">
+        </div>
+        <div style="margin-bottom: 20px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Notas / Observaciones:</label>
+          <textarea id="manual-notes" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; height: 80px;" placeholder="Detalles del pedido..."></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" onclick="cerrarModalOrdenManual()" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+          <button type="submit" style="padding: 8px 14px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Crear Orden</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-agregar-item" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+      <h3 style="margin-top: 0; color: #5b3693; margin-bottom: 15px;">➕ Agregar Nuevo Ítem</h3>
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Material:</label>
+        <input type="text" id="modal-material-input" list="lista-materiales" placeholder="🔍 Tipeá para buscar material..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" autocomplete="off">
+        <datalist id="lista-materiales"></datalist>
+      </div>
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Tipo de Impresión:</label>
+        <select id="modal-print-type" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;"></select>
+      </div>
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Nombre del Archivo / Trabajo:</label>
+        <input type="text" id="modal-filename" value="Diseno_Extra.cdr" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+      </div>
+      <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+        <div style="flex: 1;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Ancho (cm):</label>
+          <input type="number" id="modal-width" value="100" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+        </div>
+        <div style="flex: 1;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Alto (cm):</label>
+          <input type="number" id="modal-height" value="50" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+        </div>
+      </div>
+      <div style="margin-bottom: 20px;">
+        <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Copias / Cantidad:</label>
+        <input type="number" id="modal-copies" value="1" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button onclick="cerrarModalItem()" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+        <button onclick="guardarItemManual()" style="padding: 8px 14px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Guardar Ítem</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-nuevo-cliente" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 450px; max-width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+      <h3 id="modal-cliente-titulo" style="color: #5b3693; margin-top: 0; margin-bottom: 15px;">➕ Registrar Nuevo Cliente</h3>
+      <form onsubmit="guardarCliente(event)">
+        <input type="hidden" id="cliente-id">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Empresa / Nombre Fantasía (*):</label>
+          <input type="text" id="cliente-empresa" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. Imprenta Central">
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Nombre del Contacto / Razón Social:</label>
+          <input type="text" id="cliente-nombre" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej. Juan Pérez">
+        </div>
+        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+          <div style="flex: 1;">
+            <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Celular / WhatsApp:</label>
+            <input type="text" id="cliente-telefono" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">DNI / CUIT:</label>
+            <input type="text" id="cliente-dni" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+          </div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Dirección de Entrega:</label>
+          <input type="text" id="cliente-direccion" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Email:</label>
+          <input type="email" id="cliente-email" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+        </div>
+        <div style="margin-bottom: 20px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Notas internas:</label>
+          <textarea id="cliente-notas" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; height: 60px;"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" onclick="cerrarModalCliente('modal-nuevo-cliente')" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+          <button type="submit" style="padding: 8px 14px; background: #5b3693; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Guardar Cliente</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-datos-cliente" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 450px; max-width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2); position: relative;">
+      <h3 id="modal-datos-titulo" style="color: #5b3693; margin-top: 0; margin-bottom: 15px;">📋 Datos del Cliente</h3>
+      <div id="modal-datos-body" style="line-height: 1.8; font-size: 14px; color: #334155;"></div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; border-top: 1px solid #f3f4f6; padding-top: 15px;">
+        <button id="btn-editar-cliente-modal" type="button" style="padding: 8px 14px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">✏️ Editar Datos</button>
+        <button type="button" onclick="cerrarModalCliente('modal-datos-cliente')" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-cuenta-cliente" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 9999;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 850px; max-width: 95%; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+        <h3 id="cuenta-cliente-titulo" style="color: #5b3693; margin: 0;">📜 Estado de Cuenta</h3>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button onclick="descargarEstadoCuentaPDF()" style="background: #472d75; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;" title="Descargar / Imprimir Estado de Cuenta">📄 Descargar Cuenta</button>
+          <button onclick="abrirModalCargoManual()" style="background: #3b82f6; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;">➕ Cargo Manual</button>
+          <button id="btn-agregar-pago-cliente" style="background: #10b981; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;">➕ Registrar Pago</button>
+        </div>
+      </div>
+      <div id="cuenta-cliente-resumen" style="margin-bottom: 15px; padding: 12px; border-radius: 8px; font-weight: bold;"></div>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+        <thead>
+          <tr style="background: #5b3693; color: white; text-align: left;">
+            <th style="padding: 10px;">FECHA</th>
+            <th style="padding: 10px;">N° ORDEN</th>
+            <th style="padding: 10px; text-align: right;">IMPORTE</th>
+            <th style="padding: 10px; text-align: center;">MÉTODO</th>
+            <th style="padding: 10px; text-align: right;">PAGOS</th>
+            <th style="padding: 10px; text-align: right;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-cuenta-body"></tbody>
+      </table>
+      <div style="text-align: right; margin-top: 20px;">
+        <button onclick="cerrarModalCliente('modal-cuenta-cliente')" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer;">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-detalle-caja" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+      <h3 id="detalle-caja-titulo" style="margin-top: 0; color: #4c1d95;">📜 Detalle de Caja</h3>
+      <div id="detalle-caja-resumen" style="display: flex; gap: 15px; margin-bottom: 20px; font-weight: bold; text-align: center;">
+        <div style="flex: 1; background: #ecfdf5; padding: 10px; border-radius: 8px; color: #047857;">Ingresos: <span id="det-ingresos">$0</span></div>
+        <div style="flex: 1; background: #fef2f2; padding: 10px; border-radius: 8px; color: #b91c1c;">Egresos: <span id="det-egresos">$0</span></div>
+        <div style="flex: 1; background: #f3e8ff; padding: 10px; border-radius: 8px; color: #6b21a8;">Saldo Cierre: <span id="det-saldo">$0</span></div>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="background: #4c1d95; color: white; text-align: left;">
+            <th style="padding: 8px;">Hora</th>
+            <th style="padding: 8px;">Tipo</th>
+            <th style="padding: 8px;">Monto</th>
+            <th style="padding: 8px;">Método</th>
+            <th style="padding: 8px;">Detalle / Cliente</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-detalle-caja-body"></tbody>
+      </table>
+      <div style="text-align: right; margin-top: 20px;">
+        <button onclick="document.getElementById('modal-detalle-caja').style.display='none'" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-registrar-pago-directo" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 10000;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; max-width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+      <h3 style="color: #10b981; margin-top: 0; margin-bottom: 15px;">💵 Cargar / Editar Pago</h3>
+      <form onsubmit="guardarPagoClienteDirecto(event)">
+        <input type="hidden" id="pago-id-hidden">
+        <input type="hidden" id="pago-cliente-id">
+        <input type="hidden" id="pago-orden-id">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Monto Abonado ($):</label>
+          <input type="number" id="pago-monto" step="0.01" min="0.01" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="0.00">
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Forma / Medio de Pago:</label>
+          <select id="pago-metodo" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;">
+            <option value="EFECTIVO">Efectivo</option>
+            <option value="TRANSFERENCIA">Transferencia / Banco</option>
+            <option value="TRANSFERENCIA_SAS">Transferencia SAS</option>
+            <option value="MERCADO_PAGO">Mercado Pago</option>
+            <option value="NARANJA_X">Naranja X</option>
+            <option value="CHEQUE">Cheque</option>
+            <option value="E_CHEQ">E-cheq</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 20px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">Notas / Referencia (Opcional):</label>
+          <input type="text" id="pago-notas" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box;" placeholder="Ej: Seña / Nro Comprobante">
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" id="btn-eliminar-pago" onclick="eliminarPagoDirecto()" style="display:none; padding: 8px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">🗑️ Eliminar</button>
+          <div style="display: flex; gap: 10px; margin-left: auto;">
+            <button type="button" onclick="cerrarModalCliente('modal-registrar-pago-directo')" style="padding: 8px 14px; background: #cbd5e1; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cancelar</button>
+            <button type="submit" style="padding: 8px 14px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Guardar Pago</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Carga de Módulos JavaScript -->
+  <script src="/js/app.js"></script>
+  <script src="/js/ordenesClient.js"></script>
+  <script src="/js/clientesClient.js"></script>
+  <script src="/js/cajaClient.js"></script>
+  <script src="/js/listaPrecios.js"></script>
+</body>
+</html>

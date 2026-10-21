@@ -1,0 +1,124 @@
+* { box-sizing: border-box; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; background: #f1f5f9; }
+
+/* Pantalla de Login */
+#login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #5b3693; display: flex; justify-content: center; align-items: center; z-index: 2000; }
+.login-card { background: white; padding: 40px; border-radius: 16px; width: 380px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; }
+.login-card h2 { color: #5b3693; margin-top: 0; margin-bottom: 20px; font-size: 1.5rem; }
+.login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+.login-btn { width: 100%; padding: 12px; background: #5b3693; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+.login-btn:hover { background: #341a5c; }
+.login-error { color: #ef4444; font-size: 0.85rem; margin-top: 10px; display: none; }
+
+/* Sistema Principal */
+#app-container { display: none; width: 100%; height: 100vh; }
+.sidebar { width: 260px; background: #5b3693; color: white; padding: 20px; display: flex; flex-direction: column; gap: 20px; border-right: 1px solid #1e293b; }
+
+.brand-container { display: flex; flex-direction: column; align-items: center; text-align: center; padding-bottom: 10px; border-bottom: 1px solid #334155; }
+.brand-logo { width: 110px; height: auto; margin-bottom: 8px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+
+.sidebar h2 { margin: 0; font-size: 1.1rem; color: #a78bfa; padding-top: 5px; }
+.menu { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.menu-item { padding: 12px 15px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+.menu-item:hover, .menu-item.active { background: #341a5c; color: white; }
+
+.user-info { font-size: 0.85rem; color: #cbd5e1; border-top: 1px solid #334155; padding-top: 15px; display: flex; flex-direction: column; gap: 8px; }
+.btn-logout { background: #ef4444; color: white; border: none; padding: 6px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
+.btn-logout:hover { background: #dc2626; }
+
+.content { flex: 1; padding: 30px; overflow-y: auto; background: #f1f5f9; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+.header h1 { margin: 0; font-size: 1.8rem; color: #5b3693; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+
+.card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 6px solid #7c3aed; transition: 0.3s; }
+.card.warning { border-left: 6px solid #f97316; background: #fff8f6; }
+.card.delivered { border-left: 6px solid #10b981; background: #f8fafc; }
+
+/* Tarjeta Urgente */
+.card.urgent {
+  background: #ff9d4d !important;
+  border-left: 8px solid #ee5a20 !important;
+  box-shadow: 0 0 15px rgba(238, 108, 15, 0.65) !important;
+}
+
+/* Tarjeta Fijada */
+.card.pinned {
+  border-left: 8px solid #ec4899 !important;
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.35) !important;
+}
+
+.badge-urgent {
+  background: #ffedd5 !important;
+  color: #c2410c !important;
+  border: 1px solid #f97316 !important;
+  font-weight: bold;
+}
+
+/* Tarjeta Prioridad */
+.card.priority {
+  background: #48fd7f !important;
+  border-left: 8px solid #16a34a !important;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.25) !important;
+}
+
+/* Botón Pin / Fijar Tarjeta */
+.btn-pin {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  opacity: 0.5;
+  transition: 0.2s;
+}
+.btn-pin:hover, .btn-pin.pinned {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.card-title { font-size: 1.1rem; font-weight: bold; color: #5b3693; margin: 0; display: flex; align-items: center; gap: 8px; }
+
+.badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; background: #fef3c7; color: #92400e; }
+.badge-warning { background: #ffedd5; color: #c2410c; border: 1px solid #f97316; }
+.badge-success { background: #d1fae5; color: #065f46; }
+
+.data-group { margin-bottom: 8px; font-size: 0.9rem; color: #334155; }
+.data-group span { font-weight: bold; color: #60008d; }
+.email-tag { color: #64748b; font-size: 0.85rem; font-weight: normal; }
+
+.file-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 15px 0; background: #f8fafc; padding: 12px; border-radius: 8px; }
+.attachments-container { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 4px; }
+
+.item-row { display: flex; justify-content: space-between; align-items: center; background: white; padding: 6px 10px; border-radius: 6px; border: 1px solid #e2e8f0; width: 100%; gap: 6px; }
+.item-row.warning-item { border-color: #f97316; background: #fff1f2; }
+
+.btn { padding: 8px 12px; border-radius: 6px; border: none; font-weight: bold; font-size: 0.85rem; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.btn-download { color: #334155; text-decoration: none; font-size: 0.85rem; font-weight: 500; word-break: break-all; flex: 1; }
+.btn-download:hover { color: #5b3693; }
+.btn-ot { background: #5b3693; color: white; margin-bottom: 8px; width: 100%; }
+.btn-ot:hover { background: #341a5c; }
+.btn-gmail { background: #5b3693; color: white; margin-bottom: 10px; width: 100%; }
+.btn-gmail:hover { background: #341a5c; }
+.btn-status { background: #0ada56; color: white; width: 100%; margin-bottom: 8px; }
+.btn-status:hover { background: #0bd15b; }
+.btn-status:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+.btn-edit { border: none; background: none; cursor: pointer; font-size: 0.9rem; }
+.btn-edit-size { background: #f97316; color: white; border: none; padding: 3px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
+.btn-edit-size:hover { background: #ea580c; }
+.btn-delete-item { background: #ef4444; color: white; border: none; padding: 3px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
+.btn-delete-item:hover { background: #dc2626; }
+.btn-add-item { background: #10b981; color: white; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; width: 100%; margin-top: 6px; }
+.btn-add-item:hover { background: #059669; }
+
+.btn-delete-order { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; width: 100%; margin-top: 6px; }
+.btn-delete-order:hover { background: #dc2626; color: white; }
+
+.input-custom { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; box-sizing: border-box; margin-top: 4px; background: #fff; }
+.input-group { margin-bottom: 12px; }
+.input-group label { font-size: 0.8rem; font-weight: bold; color: #5b3693; display: block; }
+
+.btn-floating-add { position: fixed; bottom: 30px; right: 30px; background-color: #10b981; color: white; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 30px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 1000; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
+.btn-floating-add:hover { background-color: #059669; transform: scale(1.05); }
