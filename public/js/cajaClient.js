@@ -13,8 +13,12 @@ async function cargarCajaHoy() {
 
     if (!caja) return;
 
-    const elemFecha = document.getElementById('caja-fecha-actual');
-    if (elemFecha) elemFecha.innerText = `Caja Diaria: ${new Date(caja.cash_date).toLocaleDateString('es-AR')}`;
+    // ✅ AHORA
+const elemFecha = document.getElementById('caja-fecha-actual');
+if (elemFecha && caja.cash_date) {
+  const [a, m, d] = caja.cash_date.split('T')[0].split('-');
+  elemFecha.innerText = `Caja Diaria: ${d}/${m}/${a}`;
+}
 
     const elemIngresos = document.getElementById('caja-total-ingresos');
     if (elemIngresos) elemIngresos.innerText = `$${parseFloat(caja.total_incomes || 0).toLocaleString('es-AR')}`;
@@ -207,7 +211,10 @@ async function cargarResumenMensual() {
     }
 
     data.forEach(c => {
-      const fecha = new Date(c.cash_date).toLocaleDateString('es-AR');
+      // ✅ AHORA
+const fechaStr = c.cash_date ? c.cash_date.split('T')[0] : '';
+const [anio, mes, dia] = fechaStr.split('-');
+const fecha = fechaStr ? `${dia}/${mes}/${anio}` : '-';
       const tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid #e2e8f0';
       tr.innerHTML = `
@@ -230,7 +237,9 @@ async function verDetalleCajaHistorica(cajaId) {
     const res = await fetch(`/api/caja/detalle/${cajaId}`);
     const data = await res.json();
 
-    const fechaFormateada = new Date(data.dailyCash.cash_date).toLocaleDateString('es-AR');
+const fechaStr = data.dailyCash.cash_date ? data.dailyCash.cash_date.split('T')[0] : '';
+const [a, m, d] = fechaStr.split('-');
+const fechaFormateada = fechaStr ? `${d}/${m}/${a}` : '-';
     document.getElementById('detalle-caja-titulo').innerText = `📜 Detalle de Caja del Día: ${fechaFormateada}`;
     
     document.getElementById('det-ingresos').innerText = `$${parseFloat(data.dailyCash.total_incomes || 0).toLocaleString('es-AR')}`;
