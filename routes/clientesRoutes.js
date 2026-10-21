@@ -128,20 +128,21 @@ let query = `
       if (clienteRes.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
       const cliente = clienteRes.rows[0];
 
-      const queryMovs = `
-        SELECT 'orden' as tipo, id, created_at as fecha, CONCAT('OT #', id) as num_orden, id as ot_numero, total_price as importe, 0 as pagos, NULL as metodo, NULL as notas, status 
-        FROM work_orders 
-        WHERE client_id = $1 OR client_name ILIKE $2 OR client_name ILIKE $3
-        UNION ALL
-        SELECT 'cargo' as tipo, id, created_at as fecha, description as num_orden, NULL as ot_numero, amount as importe, 0 as pagos, NULL as metodo, NULL as notas, NULL as status 
-        FROM client_adjustments 
-        WHERE client_id = $1
-        UNION ALL
-        SELECT 'pago' as tipo, id, created_at as fecha, '-' as num_orden, NULL as ot_numero, 0 as importe, amount as pagos, payment_method as metodo, notes, NULL as status 
-        FROM client_payments 
-        WHERE client_id = $1
-        ORDER BY fecha ASC
-      `;
+      // ✅ CÓDIGO CORREGIDO (Coincidencia exacta):
+const queryMovs = `
+  SELECT 'orden' as tipo, id, created_at as fecha, CONCAT('OT #', id) as num_orden, id as ot_numero, total_price as importe, 0 as pagos, NULL as metodo, NULL as notas, status 
+  FROM work_orders 
+  WHERE client_id = $1 OR LOWER(TRIM(client_name)) = LOWER(TRIM($2)) OR LOWER(TRIM(client_name)) = LOWER(TRIM($3))
+  UNION ALL
+  SELECT 'cargo' as tipo, id, created_at as fecha, description as num_orden, NULL as ot_numero, amount as importe, 0 as pagos, NULL as metodo, NULL as notas, NULL as status 
+  FROM client_adjustments 
+  WHERE client_id = $1
+  UNION ALL
+  SELECT 'pago' as tipo, id, created_at as fecha, '-' as num_orden, NULL as ot_numero, 0 as importe, amount as pagos, payment_method as metodo, notes, NULL as status 
+  FROM client_payments 
+  WHERE client_id = $1
+  ORDER BY fecha ASC
+`;
       const movsRes = await pool.query(queryMovs, [id, cliente.company || '', cliente.name || '']);
 
       let saldoAcumulado = 0;
