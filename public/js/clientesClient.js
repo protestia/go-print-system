@@ -5,7 +5,7 @@
 let paginaActualClientes = 1;
 let terminoBusquedaClientes = '';
 
-// Obtener y mostrar clientes con paginación y búsqueda global
+// Obtener y mostrar clientes con paginación y búsqueda global (Lógica de saldo corregida)
 async function cargarClientes(pagina = 1, busqueda = '') {
   paginaActualClientes = pagina;
   terminoBusquedaClientes = busqueda;
@@ -29,8 +29,24 @@ async function cargarClientes(pagina = 1, busqueda = '') {
     
     listaClientes.forEach(c => {
       const saldoNum = parseFloat(c.saldo || 0);
-      const colorSaldo = saldoNum < 0 ? '#ef4444' : (saldoNum > 0 ? '#10b981' : '#6b7280');
-      const activeOrders = c.active_orders || 0; // 👈 Órdenes activas calculadas
+
+      // 💡 LÓGICA DE SALDO Y COLORES CORREGIDA:
+      // Deuda (saldoNum > 0) -> Rojo (#ef4444)
+      // Crédito a favor (saldoNum < 0) -> Verde (#10b981)
+      // Al día (saldoNum === 0) -> Gris (#6b7280)
+      const colorSaldo = saldoNum > 0 ? '#ef4444' : (saldoNum < 0 ? '#10b981' : '#6b7280');
+
+      // Formato visual claro para el saldo
+      let textoSaldoMostrar = `$${saldoNum.toLocaleString('es-AR')}`;
+      if (saldoNum < 0) {
+        textoSaldoMostrar = `+$${Math.abs(saldoNum).toLocaleString('es-AR')} (A Favor)`;
+      } else if (saldoNum > 0) {
+        textoSaldoMostrar = `$${saldoNum.toLocaleString('es-AR')} (Deuda)`;
+      } else {
+        textoSaldoMostrar = `$0 (Al día)`;
+      }
+
+      const activeOrders = c.active_orders || 0;
 
       const card = document.createElement('div');
       card.style.cssText = 'background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; position: relative;';
@@ -42,7 +58,7 @@ async function cargarClientes(pagina = 1, busqueda = '') {
           <h3 style="margin: 0 0 6px 0; color: #5b3693; padding-right: 25px;">${c.company || c.name || 'Sin Nombre'}</h3>
           <p style="margin: 0 0 12px 0; font-size: 0.95rem; color: #475569; font-weight: 500;">👤 ${c.name || '-'}</p>
           
-          <p style="margin: 10px 0 4px 0; font-size: 0.95rem;"><strong>Saldo:</strong> <span style="font-weight: bold; color: ${colorSaldo};">$${saldoNum.toLocaleString('es-AR')}</span></p>
+          <p style="margin: 10px 0 4px 0; font-size: 0.95rem;"><strong>Saldo:</strong> <span style="font-weight: bold; color: ${colorSaldo};">${textoSaldoMostrar}</span></p>
           <p style="margin: 4px 0 10px 0; font-size: 0.9rem; color: #d97706; font-weight: bold;">🟡 ÓRDENES ACTIVAS: ${activeOrders}</p>
         </div>
         <div style="display: flex; gap: 8px; margin-top: 15px; border-top: 1px solid #f1f5f9; padding-top: 12px;">
@@ -60,7 +76,6 @@ async function cargarClientes(pagina = 1, busqueda = '') {
     console.error('Error al cargar clientes:', err);
   }
 }
-
 // 🗑️ Función para eliminar un cliente
 async function eliminarCliente(clientId) {
   if (!confirm('⚠️ ¿Estás seguro de que deseas eliminar este cliente? Esta acción no se puede deshacer.')) return;
