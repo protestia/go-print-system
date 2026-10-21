@@ -194,6 +194,14 @@ async function cargarResumenMensual() {
   
   if (!selectMes || !inputAnio) return;
 
+  // Omoĩ jasy ha ary ápe gogua oñepyrũrõ
+  if (!selectMes.dataset.inicializado) {
+    const hoy = new Date();
+    selectMes.value = (hoy.getMonth() + 1).toString(); // getMonth() ome'ẽ 0-11
+    inputAnio.value = hoy.getFullYear().toString();
+    selectMes.dataset.inicializado = "true";
+  }
+
   const mes = selectMes.value;
   const anio = inputAnio.value;
 
@@ -211,10 +219,11 @@ async function cargarResumenMensual() {
     }
 
     data.forEach(c => {
-      // ✅ AHORA
-const fechaStr = c.cash_date ? c.cash_date.split('T')[0] : '';
-const [anio, mes, dia] = fechaStr.split('-');
-const fecha = fechaStr ? `${dia}/${mes}/${anio}` : '-';
+      // Ombohasa fecha texto ruvicha (YYYY-MM-DD) ani omoambue hora
+      const fechaStr = c.cash_date ? c.cash_date.split('T')[0] : '';
+      const [a, m, d] = fechaStr.split('-');
+      const fecha = fechaStr ? `${d}/${m}/${a}` : '-';
+
       const tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid #e2e8f0';
       tr.innerHTML = `
