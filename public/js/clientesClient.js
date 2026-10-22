@@ -425,20 +425,32 @@ function abrirModalEditarPago(pagoId, montoActual, metodoActual, notasActuales) 
 }
 
 async function eliminarMovimientoCuenta(tipo, id, clienteId) {
-  if (!confirm('¿Estás seguro de eliminar este registro de la cuenta?')) return;
+  if (!confirm('⚠️ ¿Estás seguro de eliminar este registro de la cuenta corriente?')) return;
 
-  const endpoint = tipo === 'pago' ? `/api/clientes/pagos/${id}` : `/api/clientes/cargos/${id}`;
+  // 1. Identificar el endpoint según el tipo de movimiento
+  let endpoint = '';
+  if (tipo === 'pago') {
+    endpoint = `/api/clientes/pagos/${id}`;
+  } else if (tipo === 'orden') {
+    endpoint = `/api/cuenta-corriente/movimiento/${id}`;
+  } else {
+    endpoint = `/api/clientes/cargos/${id}`;
+  }
 
   try {
     const res = await fetch(endpoint, { method: 'DELETE' });
-    if (res.ok) {
+    const data = await res.json();
+
+    if (res.ok && (data.success || data.message)) {
+      // 2. Refrescar el modal de la cuenta y la grilla de clientes
       verCuentaCliente(clienteId);
       cargarClientes(paginaActualClientes, terminoBusquedaClientes);
     } else {
-      alert('❌ No se pudo eliminar el registro.');
+      alert('❌ ' + (data.error || 'No se pudo eliminar el registro.'));
     }
   } catch (err) {
     console.error('Error al eliminar movimiento:', err);
+    alert('❌ Error de conexión al intentar eliminar el registro.');
   }
 }
 
