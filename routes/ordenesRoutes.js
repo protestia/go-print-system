@@ -7,52 +7,61 @@ module.exports = (pool) => {
   // FUNCIÓN AUXILIAR: Recalcular Total de la Orden y Sincronizar Estado de Cuenta
   // =========================================================================
   async function recalcularTotalOrden(client, workOrderId) {
-    const allItems = await client.query(`
-      SELECT woi.*, 
-             COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
-             m.name AS material_name 
-      FROM work_order_items woi
-      LEFT JOIN materials m ON woi.material_id = m.id
-      LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
-      WHERE woi.work_order_id = $1;
-    `, [workOrderId]);
+  const allItems = await client.query(`
+    SELECT woi.*, 
+           COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
+           m.name AS material_name 
+    FROM work_order_items woi
+    LEFT JOIN materials m ON woi.material_id = m.id
+    LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
+    WHERE woi.work_order_id = $1;
+  `, [workOrderId]);
 
-    let grandTotal = 0;
-    allItems.rows.forEach(it => {
-      const pM2 = parseFloat(it.final_unit_price || 0);
-      const matLower = (it.material_name || '').toLowerCase().trim();
-      const copies = parseInt(it.copies || 1);
+  let grandTotal = 0;
+  allItems.rows.forEach(it => {
+    const pM2 = parseFloat(it.final_unit_price || 0);
+    const matLower = (it.material_name || '').toLowerCase().trim();
+    const copies = parseInt(it.copies || 1);
+    const wCm = parseFloat(it.width_cm || 0);
+    const hCm = parseFloat(it.height_cm || 0);
 
-      const isU = matLower.includes('fly banner') || 
-                  matLower.includes('roll up') || 
-                  matLower.includes('portabanner') || 
-                  matLower.includes('base cruz') || 
-                  matLower.includes('cruz') || 
-                  matLower.includes('contrapeso') || 
-                  matLower.includes('cartel c') ||
-                  matLower.includes('polyfam');
+    // Detectar materiales unitarios / placas (incluye polyfam y polyfan con N)
+    const esMaterialUnitario = matLower.includes('fly banner') || 
+                               matLower.includes('roll up') || 
+                               matLower.includes('portabanner') || 
+                               matLower.includes('base cruz') || 
+                               matLower.includes('cruz') || 
+                               matLower.includes('contrapeso') || 
+                               matLower.includes('cartel c') ||
+                               matLower.includes('polyfam') ||
+                               matLower.includes('polyfan') ||
+                               matLower.includes('placa');
 
-      if (isU) {
-        grandTotal += copies * pM2;
-      } else {
-        const ancho = parseFloat(it.width_cm || 0) / 100;
-        const alto = parseFloat(it.height_cm || 0) / 100;
-        // Conservar precisión flotante exacta para no alterar centavos/pesos
-        const area = (ancho > 0 && alto > 0) ? (ancho * alto * copies) : parseFloat(it.area_m2 || 0);
-        grandTotal += area * pM2;
-      }
-    });
+    // Si es unitario O si las medidas son 1x1 cm / 0x0 cm simbólicos
+    const esMedidaSimbolica = (wCm <= 1 && hCm <= 1);
 
-    const totalFinal = Math.round(grandTotal * 100) / 100;
+    if (esMaterialUnitario || esMedidaSimbolica) {
+      // Se cobra por unidad/placa: cantidad * precio unitario
+      grandTotal += copies * pM2;
+    } else {
+      // Cálculo por m² exactos para vinilos, lonas, etc.
+      const ancho = wCm / 100;
+      const alto = hCm / 100;
+      const area = (ancho * alto) * copies;
+      grandTotal += area * pM2;
+    }
+  });
 
-    // 1. Actualizar la tarjeta de la orden (work_orders)
-    await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [totalFinal, workOrderId]);
+  const totalFinal = Math.round(grandTotal * 100) / 100;
 
-    // 2. SINCRONIZAR AUTOMÁTICAMENTE EL ESTADO DE CUENTA (client_payments)
-    await client.query(`UPDATE client_payments SET amount = $1 WHERE work_order_id = $2;`, [totalFinal, workOrderId]);
+  // 1. Actualizar la tarjeta de la orden
+  await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [totalFinal, workOrderId]);
 
-    return totalFinal;
-  }
+  // 2. Sincronizar el Estado de Cuenta
+  await client.query(`UPDATE client_payments SET amount = $1 WHERE work_order_id = $2;`, [totalFinal, workOrderId]);
+
+  return totalFinal;
+}
 
   // GET: Obtener órdenes por estado con paginación real y búsqueda global
   router.get('/api/ordenes/:estado', async (req, res) => {
