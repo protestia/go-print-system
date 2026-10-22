@@ -154,7 +154,16 @@ function crearTarjetaOrdenHTML(ot, columnaActual) {
     if (ot.items && ot.items.length > 0) {
       ot.items.forEach(it => {
         if (it.material) materialesSet.add(`${it.material} (${it.impresion || 'Estándar'})`);
-        totalM2 += parseFloat(it.area_m2 || 0);
+        
+        // CÁLCULO DE M2 EXACTO (SIN REDONDEO PREVIO)
+        let m2Item = 0;
+        if (it.width_cm && it.height_cm) {
+          m2Item = ((parseFloat(it.width_cm) / 100) * (parseFloat(it.height_cm) / 100)) * parseInt(it.copies || 1);
+        } else {
+          m2Item = parseFloat(it.area_m2 || 0);
+        }
+        totalM2 += m2Item;
+
         itemsHTML += `
           <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px 12px; margin-top: 6px; font-size: 0.85rem; color: #334155;">
             • <strong>${it.file_name || 'Archivo'}</strong> <span style="color: #64748b;">(${it.width_cm || 0}x${it.height_cm || 0} cm)</span> — ${it.material || ''} <span style="font-weight: 600; color: #5b3693;">[Cant: ${it.copies || 1}]</span>
@@ -188,7 +197,7 @@ function crearTarjetaOrdenHTML(ot, columnaActual) {
         <div><strong>Entregado por:</strong> ${ot.entregado_por || 'No especificado'}</div>
         <div><strong>Fecha de Entrega:</strong> ${ot.fecha_entrega || ot.fecha_prometida || 'N/D'}</div>
         ${ot.notes ? `<div><strong>Notas:</strong> ${ot.notes}</div>` : ''}
-        <div style="font-weight: 800; color: #059669; margin-top: 4px;">Total: $${parseFloat(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
+        <div style="font-weight: 800; color: #059669; margin-top: 4px;">Total: $${parseFloat(ot.total_price || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ARS</div>
       </div>
     `;
 
@@ -234,9 +243,12 @@ function crearTarjetaOrdenHTML(ot, columnaActual) {
     ot.items.forEach(it => {
       if (it.material) materialesSet.add(`${it.material} (${it.impresion || 'Estándar'})`);
       
-      let m2Item = parseFloat(it.area_m2 || 0);
-      if (m2Item === 0 && it.width_cm && it.height_cm) {
-        m2Item = (parseFloat(it.width_cm) * parseFloat(it.height_cm) / 10000) * parseInt(it.copies || 1);
+      // CÁLCULO DE M2 EXACTO (SIN REDONDEO PREVIO)
+      let m2Item = 0;
+      if (it.width_cm && it.height_cm) {
+        m2Item = ((parseFloat(it.width_cm) / 100) * (parseFloat(it.height_cm) / 100)) * parseInt(it.copies || 1);
+      } else {
+        m2Item = parseFloat(it.area_m2 || 0);
       }
       totalM2 += m2Item;
 
@@ -328,7 +340,7 @@ function crearTarjetaOrdenHTML(ot, columnaActual) {
         </div>
         <div style="font-size: 1rem; color: #0f172a; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
           <span><strong>Total:</strong></span>
-          <span style="color: #059669; font-weight: 800; font-size: 1.1rem;">$${parseFloat(ot.total_price || 0).toLocaleString('es-AR')} ARS</span>
+          <span style="color: #059669; font-weight: 800; font-size: 1.1rem;">$${parseFloat(ot.total_price || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ARS</span>
         </div>
       </div>
       
