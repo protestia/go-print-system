@@ -141,6 +141,9 @@ function crearTarjetaOrdenHTML(ot, columnaActual) {
   // ---------------------------------------------------------
   // VISTA COMPACTA PARA LA SECCIÓN DE HISTORIAL
   // ---------------------------------------------------------
+  // ---------------------------------------------------------
+  // VISTA COMPACTA PARA LA SECCIÓN DE HISTORIAL
+  // ---------------------------------------------------------
   if (columnaActual === 'historial') {
     let borderColorLeft = '#10b981'; 
     if (ot.is_urgent) borderColorLeft = '#f97316';
@@ -154,16 +157,7 @@ function crearTarjetaOrdenHTML(ot, columnaActual) {
     if (ot.items && ot.items.length > 0) {
       ot.items.forEach(it => {
         if (it.material) materialesSet.add(`${it.material} (${it.impresion || 'Estándar'})`);
-        
-        // CÁLCULO DE M2 EXACTO (SIN REDONDEO PREVIO)
-        let m2Item = 0;
-        if (it.width_cm && it.height_cm) {
-          m2Item = ((parseFloat(it.width_cm) / 100) * (parseFloat(it.height_cm) / 100)) * parseInt(it.copies || 1);
-        } else {
-          m2Item = parseFloat(it.area_m2 || 0);
-        }
-        totalM2 += m2Item;
-
+        totalM2 += parseFloat(it.area_m2 || 0);
         itemsHTML += `
           <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px 12px; margin-top: 6px; font-size: 0.85rem; color: #334155;">
             • <strong>${it.file_name || 'Archivo'}</strong> <span style="color: #64748b;">(${it.width_cm || 0}x${it.height_cm || 0} cm)</span> — ${it.material || ''} <span style="font-weight: 600; color: #5b3693;">[Cant: ${it.copies || 1}]</span>
@@ -197,7 +191,10 @@ function crearTarjetaOrdenHTML(ot, columnaActual) {
         <div><strong>Entregado por:</strong> ${ot.entregado_por || 'No especificado'}</div>
         <div><strong>Fecha de Entrega:</strong> ${ot.fecha_entrega || ot.fecha_prometida || 'N/D'}</div>
         ${ot.notes ? `<div><strong>Notas:</strong> ${ot.notes}</div>` : ''}
-        <div style="font-weight: 800; color: #059669; margin-top: 4px;">Total: $${parseFloat(ot.total_price || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ARS</div>
+        <div style="font-weight: 800; color: #059669; margin-top: 4px; margin-bottom: 6px;">Total: $${parseFloat(ot.total_price || 0).toLocaleString('es-AR')} ARS</div>
+        
+        <!-- ✅ BOTÓN DE VER ORDEN (OT) AGREGADO -->
+        <button onclick="window.open('/ot/${ot.ot_numero}', '_blank')" style="background: linear-gradient(90deg, #9353d3 0%, #472d75 50%, #9353d3 100%); color: white; border: none; padding: 9px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.8rem; text-align: center; box-shadow: 0 2px 5px rgba(147, 83, 211, 0.3); text-shadow: 0 1px 2px rgba(0,0,0,0.2); width: 100%; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" title="Ver / Descargar Orden de Trabajo">📄 Ver Orden (OT)</button>
       </div>
     `;
 
