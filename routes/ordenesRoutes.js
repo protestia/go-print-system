@@ -25,32 +25,43 @@ module.exports = (pool) => {
     const alto = parseFloat(it.height_cm || 0) / 100;
     const matName = (it.material_name || '').toLowerCase();
 
-    // 1. Si tiene precio manual
+    // 1. Si tiene precio manual (unit_price_override)
     if (it.unit_price_override !== null && parseFloat(it.unit_price_override) > 0) {
       const pOverride = parseFloat(it.unit_price_override);
       if (it.is_linear) {
-        const largo = Math.max(alto, ancho, 1.0);
+        const largo = Math.max(alto, ancho);
         grandTotal += largo * copies * pOverride;
       } else if (ancho > 0 && alto > 0 && !matName.includes('costura') && !matName.includes('soldadura') && !matName.includes('fly banner') && !matName.includes('roll up')) {
+        // ✅ Superficie real exacta sin forzar mínimo de 1m²
         grandTotal += (ancho * alto) * copies * pOverride;
       } else {
         grandTotal += copies * pOverride;
       }
     } else {
-      // 2. Tarifa normal por tipo
+      // 2. Tarifa de lista normal
       if (it.is_linear) {
-        const largo = Math.max(alto, ancho, 1.0);
+        const largo = Math.max(alto, ancho);
         grandTotal += largo * copies * pM2;
       } else if (matName.includes('fly banner') || matName.includes('roll up') || matName.includes('portabanner') || matName.includes('costura') || matName.includes('soldadura')) {
         grandTotal += copies * pM2;
       } else {
-        const area = Math.max(ancho * alto, 1.0);
+        // ✅ Cálculo por m² exactos como el comprobante de la OT
+        const area = (ancho > 0 && alto > 0) ? (ancho * alto) : parseFloat(it.area_m2 || 0);
         grandTotal += area * copies * pM2;
       }
     }
   });
 
-  await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [grandTotal.toFixed(2), workOrderId]);
+  // Redondear el total final a 2 decimales
+  const totalFinal = Math.round(grandTotal * 100) / 100;
+
+  // 1. Actualiza el total en la tarjeta de la orden
+  await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [totalFinal, workOrderId]);
+
+  // 2. ✅ SINCRONIZACIÓN AUTOMÁTICA: Actualiza el importe en el Estado de Cuenta
+  await client.query(`UPDATE client_payments SET amount = $1 WHERE work_order_id = $2;`, [totalFinal, workOrderId]);
+
+  return totalFinal;
 }
   
  // GET: Obtener órdenes por estado con paginación real y cálculo dinámico de precio
