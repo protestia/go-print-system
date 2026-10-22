@@ -3,45 +3,53 @@ const router = express.Router();
 
 module.exports = (pool) => {
 
-  // Función auxiliar para recalcular y actualizar el precio total de una orden
   async function recalcularTotalOrden(client, workOrderId) {
-    const allItems = await client.query(`
-      SELECT woi.*, 
-             COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
-             m.name AS material_name 
-      FROM work_order_items woi
-      LEFT JOIN materials m ON woi.material_id = m.id
-      LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
-      WHERE woi.work_order_id = $1;
-    `, [workOrderId]);
+  const allItems = await client.query(`
+    SELECT woi.*, 
+           COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
+           m.name AS material_name 
+    FROM work_order_items woi
+    LEFT JOIN materials m ON woi.material_id = m.id
+    LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
+    WHERE woi.work_order_id = $1;
+  `, [workOrderId]);
 
-    let grandTotal = 0;
-    allItems.rows.forEach(it => {
-      const pM2 = parseFloat(it.final_unit_price || 0);
-      const matLower = (it.material_name || '').toLowerCase().trim();
-      const copies = parseInt(it.copies || 1);
+  let grandTotal = 0;
+  allItems.rows.forEach(it => {
+    const pM2 = parseFloat(it.final_unit_price || 0);
+    const matLower = (it.material_name || '').toLowerCase().trim();
+    const copies = parseInt(it.copies || 1);
 
-      const isU = matLower.includes('fly banner') || 
-                  matLower.includes('roll up') || 
-                  matLower.includes('portabanner') || 
-                  matLower.includes('base cruz') || 
-                  matLower.includes('cruz') || 
-                  matLower.includes('contrapeso') || 
-                  matLower.includes('cartel c') ||
-                  matLower.includes('polyfam');
+    const isUnitarioEspecial = matLower.includes('fly banner') || 
+                               matLower.includes('roll up') || 
+                               matLower.includes('portabanner') || 
+                               matLower.includes('base cruz') || 
+                               matLower.includes('cruz') || 
+                               matLower.includes('contrapeso') || 
+                               matLower.includes('cartel c') ||
+                               matLower.includes('polyfam');
 
-      if (isU) {
-        grandTotal += copies * pM2;
-      } else {
-        const ancho = parseFloat(it.width_cm || 0) / 100;
-        const alto = parseFloat(it.height_cm || 0) / 100;
-        const area = (ancho * alto) || parseFloat(it.area_m2 || 0);
-        grandTotal += area * pM2 * copies;
+    if (isUnitarioEspecial) {
+      grandTotal += copies * pM2;
+    } else {
+      // ✅ CORRECCIÓN: Si el ítem tiene ancho y alto, calcula el área real; si no, utiliza area_m2 guardado
+      const ancho = parseFloat(it.width_cm || 0) / 100;
+      const alto = parseFloat(it.height_cm || 0) / 100;
+      let area = (ancho * alto);
+      
+      if (area === 0) {
+        area = parseFloat(it.area_m2 || 0) / (copies || 1);
       }
-    });
+      
+      // Si sigue dando 0 (por ejemplo 1m2 por defecto en DTF UV), usamos las copias o 1m2 por unidad
+      if (area === 0) area = 1;
 
-    await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [grandTotal.toFixed(2), workOrderId]);
-  }
+      grandTotal += area * pM2 * copies;
+    }
+  });
+
+  await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [grandTotal.toFixed(2), workOrderId]);
+}
 
   // GET: Obtener órdenes por estado con paginación real y búsqueda global
   router.get('/api/ordenes/:estado', async (req, res) => {
