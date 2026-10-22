@@ -425,14 +425,18 @@ function abrirModalEditarPago(pagoId, montoActual, metodoActual, notasActuales) 
 }
 
 async function eliminarMovimientoCuenta(tipo, id, clienteId) {
-  if (!confirm('⚠️ ¿Estás seguro de eliminar este registro de la cuenta corriente?')) return;
+  const mensajeConfirmacion = tipo === 'orden' 
+    ? '⚠️ ¿Estás seguro de ELIMINAR COMPLETAMENTE esta orden de trabajo? Se borrará del sistema (tarjetas, ítems y cuenta corriente).'
+    : '⚠️ ¿Estás seguro de eliminar este registro de la cuenta corriente?';
 
-  // 1. Identificar el endpoint según el tipo de movimiento
+  if (!confirm(mensajeConfirmacion)) return;
+
+  // Si es orden, llama al endpoint de eliminación total de la OT (/api/ordenes/:id)
   let endpoint = '';
-  if (tipo === 'pago') {
+  if (tipo === 'orden') {
+    endpoint = `/api/ordenes/${id}`;
+  } else if (tipo === 'pago') {
     endpoint = `/api/clientes/pagos/${id}`;
-  } else if (tipo === 'orden') {
-    endpoint = `/api/cuenta-corriente/movimiento/${id}`;
   } else {
     endpoint = `/api/clientes/cargos/${id}`;
   }
@@ -442,7 +446,7 @@ async function eliminarMovimientoCuenta(tipo, id, clienteId) {
     const data = await res.json();
 
     if (res.ok && (data.success || data.message)) {
-      // 2. Refrescar el modal de la cuenta y la grilla de clientes
+      // Refrescar modal de la cuenta y grilla de clientes
       verCuentaCliente(clienteId);
       cargarClientes(paginaActualClientes, terminoBusquedaClientes);
     } else {
@@ -450,12 +454,8 @@ async function eliminarMovimientoCuenta(tipo, id, clienteId) {
     }
   } catch (err) {
     console.error('Error al eliminar movimiento:', err);
-    alert('❌ Error de conexión al intentar eliminar el registro.');
+    alert('❌ Error de conexión al intentar eliminar.');
   }
-}
-
-function descargarEstadoCuentaPDF() {
-  window.print();
 }
 
 // ✅ CÓDIGO CORREGIDO:
