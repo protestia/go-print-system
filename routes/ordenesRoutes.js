@@ -3,11 +3,13 @@ const router = express.Router();
 
 module.exports = (pool) => {
 
-  async function recalcularTotalOrden(client, workOrderId) {
+ async function recalcularTotalOrden(client, workOrderId) {
   const allItems = await client.query(`
-    SELECT woi.*, 
-           COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
-           m.name AS material_name 
+    SELECT 
+      woi.*, 
+      COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
+      m.name AS material_name,
+      COALESCE(m.is_linear, false) AS is_linear
     FROM work_order_items woi
     LEFT JOIN materials m ON woi.material_id = m.id
     LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
@@ -15,32 +17,42 @@ module.exports = (pool) => {
   `, [workOrderId]);
 
   let grandTotal = 0;
+
   allItems.rows.forEach(it => {
     const pM2 = parseFloat(it.final_unit_price || 0);
     const copies = parseInt(it.copies || 1);
     const ancho = parseFloat(it.width_cm || 0) / 100;
     const alto = parseFloat(it.height_cm || 0) / 100;
-    
-    let areaIndividual = (ancho * alto);
+    const matName = (it.material_name || '').toLowerCase();
 
-    // 💡 CLAVE DE LA SOLUCIÓN:
-    // Si ancho y alto vienen en 0 (típico en DTF UV o ingresos desde Gmail),
-    // se toma 1 m² por copia o se utiliza el area_m2 asignado.
-    if (areaIndividual === 0) {
-      const areaM2Guardada = parseFloat(it.area_m2 || 0);
-      if (areaM2Guardada > 0) {
-        areaIndividual = areaM2Guardada / copies;
+    // 1. Si tiene precio manual
+    if (it.unit_price_override !== null && parseFloat(it.unit_price_override) > 0) {
+      const pOverride = parseFloat(it.unit_price_override);
+      if (it.is_linear) {
+        const largo = Math.max(alto, ancho, 1.0);
+        grandTotal += largo * copies * pOverride;
+      } else if (ancho > 0 && alto > 0 && !matName.includes('costura') && !matName.includes('soldadura') && !matName.includes('fly banner') && !matName.includes('roll up')) {
+        grandTotal += (ancho * alto) * copies * pOverride;
       } else {
-        areaIndividual = 1; // Resguardo de 1 m² unitario
+        grandTotal += copies * pOverride;
+      }
+    } else {
+      // 2. Tarifa normal por tipo
+      if (it.is_linear) {
+        const largo = Math.max(alto, ancho, 1.0);
+        grandTotal += largo * copies * pM2;
+      } else if (matName.includes('fly banner') || matName.includes('roll up') || matName.includes('portabanner') || matName.includes('costura') || matName.includes('soldadura')) {
+        grandTotal += copies * pM2;
+      } else {
+        const area = Math.max(ancho * alto, 1.0);
+        grandTotal += area * copies * pM2;
       }
     }
-
-    grandTotal += areaIndividual * pM2 * copies;
   });
 
   await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [grandTotal.toFixed(2), workOrderId]);
 }
-
+  
  // GET: Obtener órdenes por estado con paginación real y cálculo dinámico de precio
 router.get('/api/ordenes/:estado', async (req, res) => {
   const { estado } = req.params;
