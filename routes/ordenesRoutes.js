@@ -3,172 +3,144 @@ const router = express.Router();
 
 module.exports = (pool) => {
 
- async function recalcularTotalOrden(client, workOrderId) {
-  const allItems = await client.query(`
-    SELECT 
-      woi.*, 
-      COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
-      m.name AS material_name,
-      COALESCE(m.is_linear, false) AS is_linear
-    FROM work_order_items woi
-    LEFT JOIN materials m ON woi.material_id = m.id
-    LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
-    WHERE woi.work_order_id = $1;
-  `, [workOrderId]);
+  // =========================================================================
+  // FUNCIÓN AUXILIAR: Recalcular Total de la Orden y Sincronizar Estado de Cuenta
+  // =========================================================================
+  async function recalcularTotalOrden(client, workOrderId) {
+    const allItems = await client.query(`
+      SELECT woi.*, 
+             COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0) AS final_unit_price, 
+             m.name AS material_name 
+      FROM work_order_items woi
+      LEFT JOIN materials m ON woi.material_id = m.id
+      LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
+      WHERE woi.work_order_id = $1;
+    `, [workOrderId]);
 
-  let grandTotal = 0;
+    let grandTotal = 0;
+    allItems.rows.forEach(it => {
+      const pM2 = parseFloat(it.final_unit_price || 0);
+      const matLower = (it.material_name || '').toLowerCase().trim();
+      const copies = parseInt(it.copies || 1);
 
-  allItems.rows.forEach(it => {
-    const pM2 = parseFloat(it.final_unit_price || 0);
-    const copies = parseInt(it.copies || 1);
-    const ancho = parseFloat(it.width_cm || 0) / 100;
-    const alto = parseFloat(it.height_cm || 0) / 100;
-    const matName = (it.material_name || '').toLowerCase();
+      const isU = matLower.includes('fly banner') || 
+                  matLower.includes('roll up') || 
+                  matLower.includes('portabanner') || 
+                  matLower.includes('base cruz') || 
+                  matLower.includes('cruz') || 
+                  matLower.includes('contrapeso') || 
+                  matLower.includes('cartel c') ||
+                  matLower.includes('polyfam');
 
-    // 1. Si tiene precio manual (unit_price_override)
-    if (it.unit_price_override !== null && parseFloat(it.unit_price_override) > 0) {
-      const pOverride = parseFloat(it.unit_price_override);
-      if (it.is_linear) {
-        const largo = Math.max(alto, ancho);
-        grandTotal += largo * copies * pOverride;
-      } else if (ancho > 0 && alto > 0 && !matName.includes('costura') && !matName.includes('soldadura') && !matName.includes('fly banner') && !matName.includes('roll up')) {
-        // ✅ Superficie real exacta sin forzar mínimo de 1m²
-        grandTotal += (ancho * alto) * copies * pOverride;
-      } else {
-        grandTotal += copies * pOverride;
-      }
-    } else {
-      // 2. Tarifa de lista normal
-      if (it.is_linear) {
-        const largo = Math.max(alto, ancho);
-        grandTotal += largo * copies * pM2;
-      } else if (matName.includes('fly banner') || matName.includes('roll up') || matName.includes('portabanner') || matName.includes('costura') || matName.includes('soldadura')) {
+      if (isU) {
         grandTotal += copies * pM2;
       } else {
-        // ✅ Cálculo por m² exactos como el comprobante de la OT
-        const area = (ancho > 0 && alto > 0) ? (ancho * alto) : parseFloat(it.area_m2 || 0);
-        grandTotal += area * copies * pM2;
+        const ancho = parseFloat(it.width_cm || 0) / 100;
+        const alto = parseFloat(it.height_cm || 0) / 100;
+        // Conservar precisión flotante exacta para no alterar centavos/pesos
+        const area = (ancho > 0 && alto > 0) ? (ancho * alto * copies) : parseFloat(it.area_m2 || 0);
+        grandTotal += area * pM2;
       }
-    }
-  });
-
-  // Redondear el total final a 2 decimales
-  const totalFinal = Math.round(grandTotal * 100) / 100;
-
-  // 1. Actualiza el total en la tarjeta de la orden
-  await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [totalFinal, workOrderId]);
-
-  // 2. ✅ SINCRONIZACIÓN AUTOMÁTICA: Actualiza el importe en el Estado de Cuenta
-  await client.query(`UPDATE client_payments SET amount = $1 WHERE work_order_id = $2;`, [totalFinal, workOrderId]);
-
-  return totalFinal;
-}
-  
- // GET: Obtener órdenes por estado con paginación real y cálculo dinámico de precio
-router.get('/api/ordenes/:estado', async (req, res) => {
-  const { estado } = req.params;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const offset = (page - 1) * limit;
-  const search = (req.query.search || '').trim().toLowerCase();
-
-  const estadoMap = {
-    'diseno': 'PENDING_DESIGN',
-    'pending_design': 'PENDING_DESIGN',
-    'impresion': 'READY_TO_PRINT',
-    'ready_to_print': 'READY_TO_PRINT',
-    'entrega': 'READY_TO_DELIVER',
-    'ready_to_deliver': 'READY_TO_DELIVER',
-    'historial': 'DELIVERED',
-    'delivered': 'DELIVERED'
-  };
-
-  const statusFilter = estadoMap[(estado || '').toLowerCase()] || 'PENDING_DESIGN';
-
-  try {
-    let searchCondition = "WHERE UPPER(COALESCE(wo.status, 'PENDING_DESIGN')) = UPPER($1)";
-    let queryParams = [statusFilter];
-
-    if (search !== '') {
-      searchCondition += " AND (LOWER(wo.client_name) LIKE $2 OR CAST(wo.id AS TEXT) LIKE $2)";
-      queryParams.push(`%${search}%`);
-    }
-
-    // 1. Contar el total de órdenes para calcular las páginas totales
-    const countQuery = `SELECT COUNT(*) FROM work_orders wo ${searchCondition}`;
-    const countRes = await pool.query(countQuery, search !== '' ? [statusFilter, `%${search}%`] : [statusFilter]);
-    const totalOrdenes = parseInt(countRes.rows[0].count);
-
-    // 2. Consulta principal con cálculo dinámico en vivo del total real por cada ítem
-    let query = `
-      SELECT 
-        wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, wo.is_urgent, 
-        wo.is_pinned, wo.is_priority,
-        
-        -- ✅ CÁLCULO DINÁMICO REAL: Evalúa metros cuadrados o unidades si no hay medidas
-        COALESCE(
-          SUM(
-            CASE 
-              WHEN LOWER(m.name) LIKE '%fly banner%' OR LOWER(m.name) LIKE '%roll up%' OR LOWER(m.name) LIKE '%portabanner%' OR LOWER(m.name) LIKE '%base cruz%' OR LOWER(m.name) LIKE '%cruz%' OR LOWER(m.name) LIKE '%contrapeso%' OR LOWER(m.name) LIKE '%cartel c%' OR LOWER(m.name) LIKE '%polyfam%' 
-              THEN woi.copies * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
-              
-              ELSE 
-                GREATEST(
-                  (COALESCE(woi.width_cm, 0) / 100.0) * (COALESCE(woi.height_cm, 0) / 100.0), 
-                  CASE WHEN COALESCE(woi.area_m2, 0) > 0 THEN woi.area_m2 / woi.copies ELSE 1.0 END
-                ) * woi.copies * COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
-            END
-          ), 
-          wo.total_price, 
-          0
-        ) AS total_price,
-
-        wo.status, wo.original_files, wo.created_at, wo.email_id,
-        wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes,
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'id', woi.id,
-              'file_name', woi.file_name,
-              'material', m.name,
-              'impresion', pt.name,
-              'width_cm', woi.width_cm,
-              'height_cm', woi.height_cm,
-              'copies', woi.copies,
-              'file_url', woi.file_url,
-              'is_printed', woi.is_printed,
-              'is_delivered_item', woi.is_delivered_item,
-              'price_per_m2', COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
-            )
-          ) FILTER (WHERE woi.id IS NOT NULL), '[]'
-        ) AS items
-      FROM work_orders wo
-      LEFT JOIN work_order_items woi ON wo.id = woi.work_order_id
-      LEFT JOIN materials m ON woi.material_id = m.id
-      LEFT JOIN print_types pt ON woi.print_type_id = pt.id
-      LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
-      ${searchCondition}
-      GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes, wo.is_urgent, wo.is_pinned, wo.is_priority
-      ORDER BY wo.is_pinned DESC, wo.created_at DESC
-      LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
-    `;
-
-    queryParams.push(limit, offset);
-
-    const result = await pool.query(query, queryParams);
-
-    res.json({
-      ordenes: result.rows,
-      currentPage: page,
-      totalPages: Math.ceil(totalOrdenes / limit) || 1,
-      totalOrdenes
     });
 
-  } catch (err) {
-    console.error('❌ Error en base de datos al obtener órdenes:', err);
-    res.status(500).json({ error: 'Error en base de datos' });
+    const totalFinal = Math.round(grandTotal * 100) / 100;
+
+    // 1. Actualizar la tarjeta de la orden (work_orders)
+    await client.query(`UPDATE work_orders SET total_price = $1 WHERE id = $2;`, [totalFinal, workOrderId]);
+
+    // 2. SINCRONIZAR AUTOMÁTICAMENTE EL ESTADO DE CUENTA (client_payments)
+    await client.query(`UPDATE client_payments SET amount = $1 WHERE work_order_id = $2;`, [totalFinal, workOrderId]);
+
+    return totalFinal;
   }
-});
+
+  // GET: Obtener órdenes por estado con paginación real y búsqueda global
+  router.get('/api/ordenes/:estado', async (req, res) => {
+    const { estado } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const search = (req.query.search || '').trim().toLowerCase();
+
+    const estadoMap = {
+      'diseno': 'PENDING_DESIGN',
+      'pending_design': 'PENDING_DESIGN',
+      'impresion': 'READY_TO_PRINT',
+      'ready_to_print': 'READY_TO_PRINT',
+      'entrega': 'READY_TO_DELIVER',
+      'ready_to_deliver': 'READY_TO_DELIVER',
+      'historial': 'DELIVERED',
+      'delivered': 'DELIVERED'
+    };
+
+    const statusFilter = estadoMap[(estado || '').toLowerCase()] || 'PENDING_DESIGN';
+
+    try {
+      let searchCondition = "WHERE UPPER(COALESCE(wo.status, 'PENDING_DESIGN')) = UPPER($1)";
+      let queryParams = [statusFilter];
+
+      if (search !== '') {
+        searchCondition += " AND (LOWER(wo.client_name) LIKE $2 OR CAST(wo.id AS TEXT) LIKE $2)";
+        queryParams.push(`%${search}%`);
+      }
+
+      // 1. Contar el total de órdenes para calcular las páginas totales
+      const countQuery = `SELECT COUNT(*) FROM work_orders wo ${searchCondition}`;
+      const countRes = await pool.query(countQuery, search !== '' ? [statusFilter, `%${search}%`] : [statusFilter]);
+      const totalOrdenes = parseInt(countRes.rows[0].count);
+
+      // 2. Consulta principal con LIMIT y OFFSET para traer de a 10
+      let query = `
+        SELECT 
+          wo.id AS ot_numero, wo.client_name, wo.client_email, wo.copies, wo.is_urgent, 
+          wo.is_pinned, wo.is_priority,
+          COALESCE(wo.total_price, 0) AS total_price,
+          wo.status, wo.original_files, wo.created_at, wo.email_id,
+          wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', woi.id,
+                'file_name', woi.file_name,
+                'material', m.name,
+                'impresion', pt.name,
+                'width_cm', woi.width_cm,
+                'height_cm', woi.height_cm,
+                'copies', woi.copies,
+                'file_url', woi.file_url,
+                'is_printed', woi.is_printed,
+                'is_delivered_item', woi.is_delivered_item,
+                'price_per_m2', COALESCE(woi.unit_price_override, pr.price_per_m2, (SELECT price_per_m2 FROM pricing_rules WHERE material_id = woi.material_id LIMIT 1), 0)
+              )
+            ) FILTER (WHERE woi.id IS NOT NULL), '[]'
+          ) AS items
+        FROM work_orders wo
+        LEFT JOIN work_order_items woi ON wo.id = woi.work_order_id
+        LEFT JOIN materials m ON woi.material_id = m.id
+        LEFT JOIN print_types pt ON woi.print_type_id = pt.id
+        LEFT JOIN pricing_rules pr ON (pr.material_id = woi.material_id AND pr.print_type_id = woi.print_type_id)
+        ${searchCondition}
+        GROUP BY wo.id, wo.client_name, wo.client_email, wo.copies, wo.total_price, wo.status, wo.original_files, wo.created_at, wo.email_id, wo.fecha_prometida, wo.entregado_por, wo.fecha_entrega, wo.notes, wo.is_urgent, wo.is_pinned, wo.is_priority
+        ORDER BY wo.is_pinned DESC, wo.created_at DESC
+        LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
+      `;
+
+      queryParams.push(limit, offset);
+
+      const result = await pool.query(query, queryParams);
+
+      res.json({
+        ordenes: result.rows,
+        currentPage: page,
+        totalPages: Math.ceil(totalOrdenes / limit) || 1,
+        totalOrdenes
+      });
+
+    } catch (err) {
+      console.error('❌ Error en base de datos al obtener órdenes:', err);
+      res.status(500).json({ error: 'Error en base de datos' });
+    }
+  });
 
   // POST: Orden manual (Validando que el cliente exista previamente)
   router.post('/api/orders/manual', async (req, res) => {
@@ -179,7 +151,6 @@ router.get('/api/ordenes/:estado', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Debe especificar un nombre de cliente.' });
       }
 
-      // 1. Verificar si el cliente existe buscando por empresa o nombre (usando la tabla 'clients' o 'clientes' según corresponda)
       const clienteCheck = await pool.query(
         `SELECT id, company, name, email FROM clients WHERE LOWER(company) = LOWER($1) OR LOWER(name) = LOWER($1) LIMIT 1`,
         [clientName.trim()]
@@ -199,7 +170,6 @@ router.get('/api/ordenes/:estado', async (req, res) => {
       d.setDate(d.getDate() + 3);
       const fechaPrometidaStr = d.toLocaleDateString('es-AR');
 
-      // 2. Crear la orden vinculando opcionalmente el client_id si tu tabla work_orders lo soporta
       const newOrder = await pool.query(`
         INSERT INTO work_orders (client_name, client_email, status, original_files, total_price, fecha_prometida, notes, created_at)
         VALUES ($1, $2, 'PENDING_DESIGN', '#', 0.00, $3, $4, NOW())
@@ -313,12 +283,13 @@ router.get('/api/ordenes/:estado', async (req, res) => {
     }
   });
 
-  // DELETE: Eliminar orden
+  // DELETE: Eliminar orden completa
   router.delete('/api/ordenes/:id', async (req, res) => {
     const { id } = req.params;
     try {
       await pool.query(`DELETE FROM work_order_items WHERE work_order_id = $1;`, [id]);
       await pool.query(`DELETE FROM work_orders WHERE id = $1;`, [id]);
+      await pool.query(`DELETE FROM client_payments WHERE work_order_id = $1;`, [id]);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Error al eliminar orden' });
@@ -327,72 +298,54 @@ router.get('/api/ordenes/:estado', async (req, res) => {
 
   // --- ÍTEMS DE ÓRDENES ---
 
-  // PUT: Modificar medidas/copias de un ítem
-router.put('/api/ordenes/item/:id', async (req, res) => {
-  const { id } = req.params;
-  const { width_cm, height_cm, copies } = req.body;
-  const client = await pool.connect();
+  // POST: Agregar ítem a una orden
+  router.post('/api/ordenes/:id/item', async (req, res) => {
+    const { id } = req.params;
+    const { file_name, material_id, print_type_id, width_cm, height_cm, copies, file_url } = req.body;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-  try {
-    await client.query('BEGIN');
+      const matRes = await client.query(`SELECT name, is_linear FROM materials WHERE id = $1;`, [material_id]);
+      const mat = matRes.rows[0];
+      const matLower = (mat ? mat.name : '').toLowerCase();
+      
+      const esUnitario = matLower.includes('fly banner') || 
+                         matLower.includes('roll up') || 
+                         matLower.includes('portabanner') || 
+                         matLower.includes('base cruz') || 
+                         matLower.includes('cruz') || 
+                         matLower.includes('contrapeso') || 
+                         matLower.includes('cartel c') ||
+                         matLower.includes('polyfam');
 
-    const itemRes = await client.query(
-      `SELECT woi.*, m.name AS material_name 
-       FROM work_order_items woi 
-       LEFT JOIN materials m ON woi.material_id = m.id 
-       WHERE woi.id = $1;`, 
-      [id]
-    );
+      // Guardar superficie exacta en flotante sin toFixed recortado
+      let area_m2 = esUnitario ? copies : ((width_cm / 100) * (height_cm / 100)) * copies;
 
-    if (itemRes.rows.length === 0) {
+      await client.query(`
+        INSERT INTO work_order_items (work_order_id, file_name, material_id, print_type_id, width_cm, height_cm, copies, area_m2, file_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+      `, [id, file_name || 'Item.jpg', material_id, print_type_id, esUnitario ? 0 : width_cm, esUnitario ? 0 : height_cm, copies, area_m2, file_url || '#']);
+
+      // Recalcular y sincronizar orden y cuenta corriente
+      await recalcularTotalOrden(client, id);
+
+      await client.query('COMMIT');
+      res.json({ success: true });
+    } catch (err) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'No encontrado' });
+      res.status(500).json({ error: err.message });
+    } finally {
+      client.release();
     }
-    
-    const item = itemRes.rows[0];
-    const matLower = (item.material_name || '').toLowerCase().trim();
-
-    const esUnitario = matLower.includes('fly banner') || 
-                       matLower.includes('roll up') || 
-                       matLower.includes('portabanner') || 
-                       matLower.includes('base cruz') || 
-                       matLower.includes('cruz') || 
-                       matLower.includes('contrapeso') || 
-                       matLower.includes('cartel c') ||
-                       matLower.includes('polyfam');
-
-    const cantCopias = parseInt(copies || 1);
-    const anchoNum = parseFloat(width_cm || 0);
-    const altoNum = parseFloat(height_cm || 0);
-
-    // ✅ CORRECCIÓN 1: Conservar m² con precisión decimal exacta (sin .toFixed previo)
-    let area_m2 = esUnitario ? cantCopias : ((anchoNum / 100) * (altoNum / 100)) * cantCopias;
-
-    await client.query(
-      `UPDATE work_order_items 
-       SET width_cm = $1, height_cm = $2, copies = $3, area_m2 = $4 
-       WHERE id = $5;`, 
-      [esUnitario ? 0 : anchoNum, esUnitario ? 0 : altoNum, cantCopias, area_m2, id]
-    );
-
-    // ✅ CORRECCIÓN 2: Recalcular la orden y sincronizar automáticamente con la cuenta corriente
-    const nuevoTotal = await recalcularYSincronizarTotalOrden(client, item.work_order_id);
-
-    await client.query('COMMIT');
-    res.json({ message: 'Actualizado correctamente', nuevoTotal });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
-  }
-});
+  });
 
   // PUT: Modificar medidas/copias de un ítem
   router.put('/api/ordenes/item/:id', async (req, res) => {
     const { id } = req.params;
     const { width_cm, height_cm, copies } = req.body;
     const client = await pool.connect();
+
     try {
       await client.query('BEGIN');
 
@@ -425,19 +378,21 @@ router.put('/api/ordenes/item/:id', async (req, res) => {
       const anchoNum = parseFloat(width_cm || 0);
       const altoNum = parseFloat(height_cm || 0);
 
+      // Conservar m² flotante exacto
       let area_m2 = esUnitario ? cantCopias : ((anchoNum / 100) * (altoNum / 100)) * cantCopias;
 
       await client.query(
         `UPDATE work_order_items 
          SET width_cm = $1, height_cm = $2, copies = $3, area_m2 = $4 
          WHERE id = $5;`, 
-        [esUnitario ? 0 : anchoNum, esUnitario ? 0 : altoNum, cantCopias, area_m2.toFixed(2), id]
+        [esUnitario ? 0 : anchoNum, esUnitario ? 0 : altoNum, cantCopias, area_m2, id]
       );
 
+      // Recalcular orden y sincronizar Estado de Cuenta
       await recalcularTotalOrden(client, item.work_order_id);
 
       await client.query('COMMIT');
-      res.json({ message: 'Actualizado' });
+      res.json({ message: 'Actualizado correctamente' });
     } catch (err) {
       await client.query('ROLLBACK');
       res.status(500).json({ error: err.message });
@@ -537,7 +492,7 @@ router.put('/api/ordenes/item/:id', async (req, res) => {
     }
   });
 
-  // Alias para la ruta de precio manual por si el front usa otra variante de URL
+  // Alias para la ruta de precio manual
   router.put('/api/ordenes/item/precio-manual/:id', async (req, res) => {
     const { id } = req.params;
     const { unit_price_override } = req.body;
@@ -655,7 +610,7 @@ router.put('/api/ordenes/item/:id', async (req, res) => {
                            matLower.includes('roll up') ||
                            matLower.includes('cartel c') ||
                            matLower.includes('polyfam');
-                         
+                           
         grupos[key].esUnitarioFijo = esUnitario;
 
         let subM2 = 0;
@@ -832,5 +787,5 @@ router.put('/api/ordenes/item/:id', async (req, res) => {
     }
   });
 
-  return router; // 👈 OBLIGATORIO RETORNAR EL ROUTER
+  return router;
 };
