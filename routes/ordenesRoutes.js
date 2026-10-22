@@ -20,6 +20,7 @@ module.exports = (pool) => {
     const matLower = (it.material_name || '').toLowerCase().trim();
     const copies = parseInt(it.copies || 1);
 
+    // Solo los materiales verdaderamente unitarios por pieza (estructuras, banners con pie)
     const isUnitarioEspecial = matLower.includes('fly banner') || 
                                matLower.includes('roll up') || 
                                matLower.includes('portabanner') || 
@@ -32,16 +33,17 @@ module.exports = (pool) => {
     if (isUnitarioEspecial) {
       grandTotal += copies * pM2;
     } else {
-      // ✅ CORRECCIÓN: Si el ítem tiene ancho y alto, calcula el área real; si no, utiliza area_m2 guardado
+      // Para metros cuadrados (DTF UV, Vinilos, Lonas, etc.)
       const ancho = parseFloat(it.width_cm || 0) / 100;
       const alto = parseFloat(it.height_cm || 0) / 100;
       let area = (ancho * alto);
       
+      // Si ancho/alto no venían en cm pero se guardó area_m2
       if (area === 0) {
         area = parseFloat(it.area_m2 || 0) / (copies || 1);
       }
       
-      // Si sigue dando 0 (por ejemplo 1m2 por defecto en DTF UV), usamos las copias o 1m2 por unidad
+      // Resguardo: mínimo 1 m² si no hay medidas
       if (area === 0) area = 1;
 
       grandTotal += area * pM2 * copies;
