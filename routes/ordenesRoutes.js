@@ -316,46 +316,66 @@ router.get('/api/ordenes/:estado', async (req, res) => {
 
   // --- ÍTEMS DE ÓRDENES ---
 
-  // POST: Agregar ítem a una orden (¡Ahora calcula y actualiza el total automáticamente!)
-  router.post('/api/ordenes/:id/item', async (req, res) => {
-    const { id } = req.params;
-    const { file_name, material_id, print_type_id, width_cm, height_cm, copies, file_url } = req.body;
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+  // PUT: Modificar medidas/copias de un ítem
+router.put('/api/ordenes/item/:id', async (req, res) => {
+  const { id } = req.params;
+  const { width_cm, height_cm, copies } = req.body;
+  const client = await pool.connect();
 
-      const matRes = await client.query(`SELECT name, is_linear FROM materials WHERE id = $1;`, [material_id]);
-      const mat = matRes.rows[0];
-      const matLower = (mat ? mat.name : '').toLowerCase();
-      
-      const esUnitario = matLower.includes('fly banner') || 
-                         matLower.includes('roll up') || 
-                         matLower.includes('portabanner') || 
-                         matLower.includes('base cruz') || 
-                         matLower.includes('cruz') || 
-                         matLower.includes('contrapeso') || 
-                         matLower.includes('cartel c') ||
-                         matLower.includes('polyfam');
+  try {
+    await client.query('BEGIN');
 
-      let area_m2 = esUnitario ? copies : ((width_cm / 100) * (height_cm / 100)) * copies;
+    const itemRes = await client.query(
+      `SELECT woi.*, m.name AS material_name 
+       FROM work_order_items woi 
+       LEFT JOIN materials m ON woi.material_id = m.id 
+       WHERE woi.id = $1;`, 
+      [id]
+    );
 
-      await client.query(`
-        INSERT INTO work_order_items (work_order_id, file_name, material_id, print_type_id, width_cm, height_cm, copies, area_m2, file_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
-      `, [id, file_name || 'Item.jpg', material_id, print_type_id, esUnitario ? 0 : width_cm, esUnitario ? 0 : height_cm, copies, area_m2.toFixed(2), file_url || '#']);
-
-      // Recalcular el total general de la orden
-      await recalcularTotalOrden(client, id);
-
-      await client.query('COMMIT');
-      res.json({ success: true });
-    } catch (err) {
+    if (itemRes.rows.length === 0) {
       await client.query('ROLLBACK');
-      res.status(500).json({ error: err.message });
-    } finally {
-      client.release();
+      return res.status(404).json({ error: 'No encontrado' });
     }
-  });
+    
+    const item = itemRes.rows[0];
+    const matLower = (item.material_name || '').toLowerCase().trim();
+
+    const esUnitario = matLower.includes('fly banner') || 
+                       matLower.includes('roll up') || 
+                       matLower.includes('portabanner') || 
+                       matLower.includes('base cruz') || 
+                       matLower.includes('cruz') || 
+                       matLower.includes('contrapeso') || 
+                       matLower.includes('cartel c') ||
+                       matLower.includes('polyfam');
+
+    const cantCopias = parseInt(copies || 1);
+    const anchoNum = parseFloat(width_cm || 0);
+    const altoNum = parseFloat(height_cm || 0);
+
+    // ✅ CORRECCIÓN 1: Conservar m² con precisión decimal exacta (sin .toFixed previo)
+    let area_m2 = esUnitario ? cantCopias : ((anchoNum / 100) * (altoNum / 100)) * cantCopias;
+
+    await client.query(
+      `UPDATE work_order_items 
+       SET width_cm = $1, height_cm = $2, copies = $3, area_m2 = $4 
+       WHERE id = $5;`, 
+      [esUnitario ? 0 : anchoNum, esUnitario ? 0 : altoNum, cantCopias, area_m2, id]
+    );
+
+    // ✅ CORRECCIÓN 2: Recalcular la orden y sincronizar automáticamente con la cuenta corriente
+    const nuevoTotal = await recalcularYSincronizarTotalOrden(client, item.work_order_id);
+
+    await client.query('COMMIT');
+    res.json({ message: 'Actualizado correctamente', nuevoTotal });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
 
   // PUT: Modificar medidas/copias de un ítem
   router.put('/api/ordenes/item/:id', async (req, res) => {
