@@ -188,16 +188,16 @@ async function cerrarCajaDiaria() {
 }
 
 // Cargar Resumen Mensual de Cajas Históricas
+// Cargar Resumen Mensual de Cajas Históricas
 async function cargarResumenMensual() {
   const selectMes = document.getElementById('caja-mes');
   const inputAnio = document.getElementById('caja-anio');
   
   if (!selectMes || !inputAnio) return;
 
-  // Omoĩ jasy ha ary ápe gogua oñepyrũrõ
   if (!selectMes.dataset.inicializado) {
     const hoy = new Date();
-    selectMes.value = (hoy.getMonth() + 1).toString(); // getMonth() ome'ẽ 0-11
+    selectMes.value = (hoy.getMonth() + 1).toString();
     inputAnio.value = hoy.getFullYear().toString();
     selectMes.dataset.inicializado = "true";
   }
@@ -214,12 +214,11 @@ async function cargarResumenMensual() {
     tbody.innerHTML = '';
 
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: #888;">No hay cierres de caja registrados para este mes.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px; color: #888;">No hay cierres de caja registrados para este mes.</td></tr>';
       return;
     }
 
     data.forEach(c => {
-      // Ombohasa fecha texto ruvicha (YYYY-MM-DD) ani omoambue hora
       const fechaStr = c.cash_date ? c.cash_date.split('T')[0] : '';
       const [a, m, d] = fechaStr.split('-');
       const fecha = fechaStr ? `${d}/${m}/${a}` : '-';
@@ -227,7 +226,6 @@ async function cargarResumenMensual() {
       const ingresos = parseFloat(c.total_incomes || 0);
       const egresos = parseFloat(c.total_expenses || 0);
       
-      // 💡 Red de seguridad: oiméramo closing_balance oĩ 0-pe ha caja oñembotyma, oipapa (ingresos - egresos)
       let saldoCierre = parseFloat(c.closing_balance || 0);
       if (saldoCierre === 0 && c.status === 'CLOSED') {
         saldoCierre = ingresos - egresos;
@@ -235,12 +233,23 @@ async function cargarResumenMensual() {
 
       const tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid #e2e8f0';
+      tr.style.cursor = 'pointer';
+      tr.style.transition = 'background-color 0.15s';
+      tr.onmouseenter = () => tr.style.backgroundColor = '#f8fafc';
+      tr.onmouseleave = () => tr.style.backgroundColor = 'transparent';
+      tr.onclick = () => verDetalleCajaHistorica(c.id);
+
       tr.innerHTML = `
-        <td style="padding: 10px;">${fecha}</td>
+        <td style="padding: 10px; font-weight: 600;">${fecha}</td>
         <td style="padding: 10px; color: #10b981; font-weight: bold;">$${ingresos.toLocaleString('es-AR')}</td>
         <td style="padding: 10px; color: #ef4444; font-weight: bold;">$${egresos.toLocaleString('es-AR')}</td>
         <td style="padding: 10px; font-weight: bold;">$${saldoCierre.toLocaleString('es-AR')}</td>
         <td style="padding: 10px;">${c.status === 'CLOSED' ? '🔴 Cerrada' : '🟢 Abierta'}</td>
+        <td style="padding: 10px; text-align: center;">
+          <button type="button" onclick="event.stopPropagation(); verDetalleCajaHistorica(${c.id})" style="background: #5b3693; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer;">
+            🔍 Ver Detalle
+          </button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -249,6 +258,59 @@ async function cargarResumenMensual() {
   }
 }
 
+// Consultar y desplegar detalle de una caja pasada en Modal
+async function verDetalleCajaHistorica(cajaId) {
+  try {
+    const res = await fetch(`/api/caja/detalle/${cajaId}`);
+    if (!res.ok) throw new Error('Error al consultar detalle');
+    const data = await res.json();
+
+    const fechaStr = data.dailyCash.cash_date ? data.dailyCash.cash_date.split('T')[0] : '';
+    const [a, m, d] = fechaStr.split('-');
+    const fechaFormateada = fechaStr ? `${d}/${m}/${a}` : '-';
+    document.getElementById('detalle-caja-titulo').innerText = `📜 Detalle de Caja del Día: ${fechaFormateada}`;
+    
+    const ingresos = parseFloat(data.dailyCash.total_incomes || 0);
+    const egresos = parseFloat(data.dailyCash.total_expenses || 0);
+    let saldoCierre = parseFloat(data.dailyCash.closing_balance || 0);
+    if (saldoCierre === 0 && (ingresos > 0 || egresos > 0)) {
+      saldoCierre = ingresos - egresos;
+    }
+
+    document.getElementById('det-ingresos').innerText = `$${ingresos.toLocaleString('es-AR')}`;
+    document.getElementById('det-egresos').innerText = `$${egresos.toLocaleString('es-AR')}`;
+    document.getElementById('det-saldo').innerText = `$${saldoCierre.toLocaleString('es-AR')}`;
+
+    const tbody = document.getElementById('tabla-detalle-caja-body');
+    tbody.innerHTML = '';
+
+    if (!data.movements || data.movements.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: #888;">No hubo movimientos registrados en este día.</td></tr>';
+    } else {
+      data.movements.forEach(m => {
+        const hora = new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        const esIngreso = m.type === 'INCOME' || m.type === 'INGRESO';
+        
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        tr.innerHTML = `
+          <td style="padding: 8px 10px;">${hora}</td>
+          <td style="padding: 8px 10px; font-weight: bold; color: ${esIngreso ? '#10b981' : '#ef4444'};">${esIngreso ? 'INGRESO' : 'EGRESO'}</td>
+          <td style="padding: 8px 10px; font-weight: bold;">$${parseFloat(m.amount).toLocaleString('es-AR')}</td>
+          <td style="padding: 8px 10px; color: #6b7280; font-weight: bold;">${m.payment_method || '-'}</td>
+          <td style="padding: 8px 10px;">${m.description || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    const modalDetalle = document.getElementById('modal-detalle-caja');
+    if (modalDetalle) modalDetalle.style.display = 'flex';
+  } catch (err) {
+    console.error('Error al abrir detalle:', err);
+    alert('❌ No se pudo cargar el detalle de esta caja.');
+  }
+}
 // Consultar y desplegar detalle de una caja pasada en Modal
 async function verDetalleCajaHistorica(cajaId) {
   try {
