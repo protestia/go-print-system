@@ -196,14 +196,15 @@
           </div>
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
-              <tr style="background-color: #341a5c; color: white;">
-                <th style="padding: 10px;">Fecha</th>
-                <th style="padding: 10px;">Ingresos</th>
-                <th style="padding: 10px;">Egresos</th>
-                <th style="padding: 10px;">Saldo Cierre</th>
-                <th style="padding: 10px;">Estado</th>
-              </tr>
-            </thead>
+  <tr style="background-color: #341a5c; color: white;">
+    <th style="padding: 10px;">Fecha</th>
+    <th style="padding: 10px;">Ingresos</th>
+    <th style="padding: 10px;">Egresos</th>
+    <th style="padding: 10px;">Saldo Cierre</th>
+    <th style="padding: 10px;">Estado</th>
+    <th style="padding: 10px; text-align: center;">Acciones</th>
+  </tr>
+</thead>
             <tbody id="tabla-caja-mensual"></tbody>
           </table>
         </div>
@@ -374,31 +375,36 @@
     </div>
   </div>
 
-  <div id="modal-detalle-caja" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000;">
-    <div style="background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
-      <h3 id="detalle-caja-titulo" style="margin-top: 0; color: #4c1d95;">📜 Detalle de Caja</h3>
-      <div id="detalle-caja-resumen" style="display: flex; gap: 15px; margin-bottom: 20px; font-weight: bold; text-align: center;">
-        <div style="flex: 1; background: #ecfdf5; padding: 10px; border-radius: 8px; color: #047857;">Ingresos: <span id="det-ingresos">$0</span></div>
-        <div style="flex: 1; background: #fef2f2; padding: 10px; border-radius: 8px; color: #b91c1c;">Egresos: <span id="det-egresos">$0</span></div>
-        <div style="flex: 1; background: #f3e8ff; padding: 10px; border-radius: 8px; color: #6b21a8;">Saldo Cierre: <span id="det-saldo">$0</span></div>
-      </div>
+  <div id="modal-detalle-caja" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999;">
+  <div style="background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 750px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+    <h3 id="detalle-caja-titulo" style="margin-top: 0; color: #4c1d95;">📜 Detalle de Caja</h3>
+    <div id="detalle-caja-resumen" style="display: flex; gap: 15px; margin-bottom: 15px; font-weight: bold; text-align: center;">
+      <div style="flex: 1; background: #ecfdf5; padding: 10px; border-radius: 8px; color: #047857;">Ingresos: <span id="det-ingresos">$0</span></div>
+      <div style="flex: 1; background: #fef2f2; padding: 10px; border-radius: 8px; color: #b91c1c;">Egresos: <span id="det-egresos">$0</span></div>
+      <div style="flex: 1; background: #f3e8ff; padding: 10px; border-radius: 8px; color: #6b21a8;">Saldo Cierre: <span id="det-saldo">$0</span></div>
+    </div>
+    
+    <!-- Contenedor con scroll interno para que el encabezado y el botón Cerrar queden fijos -->
+    <div style="overflow-y: auto; flex: 1; border: 1px solid #e2e8f0; border-radius: 8px;">
       <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-        <thead>
+        <thead style="position: sticky; top: 0; z-index: 1;">
           <tr style="background: #4c1d95; color: white; text-align: left;">
-            <th style="padding: 8px;">Hora</th>
-            <th style="padding: 8px;">Tipo</th>
-            <th style="padding: 8px;">Monto</th>
-            <th style="padding: 8px;">Método</th>
-            <th style="padding: 8px;">Detalle / Cliente</th>
+            <th style="padding: 10px;">Hora</th>
+            <th style="padding: 10px;">Tipo</th>
+            <th style="padding: 10px;">Monto</th>
+            <th style="padding: 10px;">Método</th>
+            <th style="padding: 10px;">Detalle / Cliente</th>
           </tr>
         </thead>
         <tbody id="tabla-detalle-caja-body"></tbody>
       </table>
-      <div style="text-align: right; margin-top: 20px;">
-        <button onclick="document.getElementById('modal-detalle-caja').style.display='none'" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cerrar</button>
-      </div>
+    </div>
+
+    <div style="text-align: right; margin-top: 15px;">
+      <button onclick="document.getElementById('modal-detalle-caja').style.display='none'" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cerrar</button>
     </div>
   </div>
+</div>
 
   <div id="modal-registrar-pago-directo" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 10000;">
     <div style="background: white; padding: 25px; border-radius: 12px; width: 400px; max-width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
