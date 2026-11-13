@@ -4,6 +4,7 @@
 
 let paginaActualClientes = 1;
 let terminoBusquedaClientes = '';
+let cuentaClienteActual = null;
 
 // Obtener y mostrar clientes con paginación y búsqueda global (Lógica de saldo corregida)
 async function cargarClientes(pagina = 1, busqueda = '') {
@@ -76,6 +77,7 @@ async function cargarClientes(pagina = 1, busqueda = '') {
     console.error('Error al cargar clientes:', err);
   }
 }
+
 // 🗑️ Función para eliminar un cliente
 async function eliminarCliente(clientId) {
   if (!confirm('⚠️ ¿Estás seguro de que deseas eliminar este cliente? Esta acción no se puede deshacer.')) return;
@@ -130,7 +132,7 @@ function filtrarClientes() {
   const query = document.getElementById('buscar-cliente')?.value || '';
   clearTimeout(window.searchTimeoutClientes);
   window.searchTimeoutClientes = setTimeout(() => {
-    cargarClientes(1, query); // Vuelve a la página 1 aplicando la búsqueda en todo el servidor
+    cargarClientes(1, query);
   }, 300);
 }
 
@@ -237,6 +239,7 @@ async function verCuentaCliente(clientId) {
     if (!res.ok) throw new Error('No se pudo obtener la cuenta');
     
     const data = await res.json();
+    cuentaClienteActual = data;
 
     const elemTitulo = document.getElementById('cuenta-cliente-titulo');
     if (elemTitulo) elemTitulo.innerText = `📜 Estado de Cuenta: ${data.cliente ? (data.cliente.company || data.cliente.name) : 'Cliente'}`;
@@ -279,9 +282,10 @@ async function verCuentaCliente(clientId) {
         
         let accionPagoHTML = '-';
         if (m.pagos > 0) {
+          const notasSeguras = (m.notas || '').replace(/'/g, "\\'");
           accionPagoHTML = `
             <span style="color: #10b981; font-weight: bold;">$${m.pagos.toLocaleString('es-AR')}</span>
-            <button onclick="abrirModalEditarPago(${m.id}, ${m.pagos}, '${m.metodo}', '${m.notas || ''}')" title="Editar Pago" style="background:none; border:none; cursor:pointer; margin-left: 6px;">✏️</button>
+            <button onclick="abrirModalEditarPago(${m.id}, ${m.pagos}, '${m.metodo || 'EFECTIVO'}', '${notasSeguras}')" title="Editar Pago" style="background:none; border:none; cursor:pointer; margin-left: 6px;">✏️</button>
           `;
         }
 
@@ -431,7 +435,6 @@ async function eliminarMovimientoCuenta(tipo, id, clienteId) {
 
   if (!confirm(mensajeConfirmacion)) return;
 
-  // Si es orden, llama al endpoint de eliminación total de la OT (/api/ordenes/:id)
   let endpoint = '';
   if (tipo === 'orden') {
     endpoint = `/api/ordenes/${id}`;
@@ -446,7 +449,6 @@ async function eliminarMovimientoCuenta(tipo, id, clienteId) {
     const data = await res.json();
 
     if (res.ok && (data.success || data.message)) {
-      // Refrescar modal de la cuenta y grilla de clientes
       verCuentaCliente(clienteId);
       cargarClientes(paginaActualClientes, terminoBusquedaClientes);
     } else {
@@ -458,11 +460,9 @@ async function eliminarMovimientoCuenta(tipo, id, clienteId) {
   }
 }
 
-// ✅ CÓDIGO CORREGIDO:
 function irAOrdenDesdeCuenta(otNumero, status) {
   cerrarModalCliente('modal-cuenta-cliente');
 
-  // Normalizar el estado para asegurar que caiga en la sección correcta
   const st = (status || '').toUpperCase();
   let seccionDestino = 'diseno';
 
@@ -479,10 +479,7 @@ function irAOrdenDesdeCuenta(otNumero, status) {
   setTimeout(() => {
     const inputBuscar = document.getElementById('input-buscar');
     if (inputBuscar) {
-      // 1. Escribimos únicamente el número puro (ej: "55580")
       inputBuscar.value = otNumero;
-      
-      // 2. Disparamos la función de filtrado si existe
       if (typeof filtrarOrdenes === 'function') {
         filtrarOrdenes();
       } else if (typeof cargarOrdenes === 'function') {
@@ -490,4 +487,166 @@ function irAOrdenDesdeCuenta(otNumero, status) {
       }
     }
   }, 300);
+}
+
+// 📄 Generar Comprobante de Estado de Cuenta listo para imprimir / guardar en PDF
+function descargarEstadoCuentaPDF() {
+  if (!cuentaClienteActual || !cuentaClienteActual.cliente) {
+    alert('⚠️ No hay datos de cuenta cargados para descargar.');
+    return;
+  }
+
+  const { cliente, movimientos, saldo_final } = cuentaClienteActual;
+  const nombreCliente = (cliente.company || cliente.name || 'Cliente').toUpperCase();
+  const contacto = (cliente.company && cliente.name && cliente.company !== cliente.name) ? cliente.name : '';
+  const fechaEmision = new Date().toLocaleDateString('es-AR');
+  const saldoNum = parseFloat(saldo_final || 0);
+
+  let estadoTexto = 'CUENTA AL DÍA';
+  let estadoColor = '#475569';
+  let estadoBg = '#f1f5f9';
+  let saldoFormateado = '$0,00';
+
+  if (saldoNum > 0) {
+    estadoTexto = 'SALDO PENDIENTE A ABONAR';
+    estadoColor = '#b91c1c';
+    estadoBg = '#fee2e2';
+    saldoFormateado = `$${saldoNum.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  } else if (saldoNum < 0) {
+    estadoTexto = 'SALDO A FAVOR DEL CLIENTE';
+    estadoColor = '#047857';
+    estadoBg = '#ecfdf5';
+    saldoFormateado = `$${Math.abs(saldoNum).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  let filasHTML = '';
+  if (!movimientos || movimientos.length === 0) {
+    filasHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">No se registran movimientos en esta cuenta.</td></tr>`;
+  } else {
+    movimientos.forEach(m => {
+      const importeStr = m.importe > 0
+        ? `$${parseFloat(m.importe).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '-';
+      const pagoStr = m.pagos > 0
+        ? `$${parseFloat(m.pagos).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '-';
+      const saldoRow = parseFloat(m.total_saldo || 0);
+      const saldoRowStr = saldoRow < 0
+        ? `-$${Math.abs(saldoRow).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : `$${saldoRow.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      let detalleStr = m.num_orden || '-';
+      if (m.tipo === 'pago') {
+        detalleStr = m.notas ? `Pago (${m.notas})` : 'Pago registrado';
+      }
+
+      filasHTML += `
+        <tr>
+          <td>${m.fecha || '-'}</td>
+          <td style="font-weight: 600;">${detalleStr}</td>
+          <td class="text-right" style="color: ${m.importe > 0 ? '#dc2626' : '#64748b'}; font-weight: ${m.importe > 0 ? 'bold' : 'normal'};">${importeStr}</td>
+          <td class="text-center">${m.metodo || '-'}</td>
+          <td class="text-right" style="color: ${m.pagos > 0 ? '#059669' : '#64748b'}; font-weight: ${m.pagos > 0 ? 'bold' : 'normal'};">${pagoStr}</td>
+          <td class="text-right" style="font-weight: bold;">${saldoRowStr}</td>
+        </tr>
+      `;
+    });
+  }
+
+  const ventanaPrint = window.open('', '_blank', 'width=900,height=750');
+  if (!ventanaPrint) {
+    alert('⚠️ El navegador bloqueó la ventana emergente. Habilita los pop-ups para descargar el PDF.');
+    return;
+  }
+
+  ventanaPrint.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Estado de Cuenta - ${nombreCliente}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; color: #1e293b; background: #fff; }
+        .container { max-width: 820px; margin: auto; border: 1px solid #cbd5e1; border-radius: 10px; padding: 24px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #5b3693; padding-bottom: 16px; margin-bottom: 18px; }
+        .header img { max-height: 60px; width: auto; }
+        .header-title { text-align: right; }
+        .header-title h1 { margin: 0; font-size: 20px; color: #5b3693; letter-spacing: 0.5px; }
+        .header-title p { margin: 4px 0 0 0; font-size: 12px; color: #64748b; }
+        .client-box { display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; }
+        .client-info p { margin: 3px 0; font-size: 13px; }
+        .saldo-box { background: ${estadoBg}; color: ${estadoColor}; border: 1px solid ${estadoColor}33; padding: 12px 18px; border-radius: 8px; text-align: right; }
+        .saldo-box .label { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        .saldo-box .amount { font-size: 20px; font-weight: 800; margin-top: 2px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+        th { background-color: #5b3693; color: white; padding: 10px 8px; text-align: left; font-size: 11px; letter-spacing: 0.4px; }
+        td { border-bottom: 1px solid #e2e8f0; padding: 9px 8px; }
+        tr:nth-child(even) td { background-color: #fcfaff; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .footer { margin-top: 24px; padding-top: 12px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; font-size: 11px; color: #64748b; }
+        .no-print { text-align: center; margin-bottom: 16px; }
+        .btn-print { background: #5b3693; color: white; border: none; padding: 10px 22px; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; }
+        .btn-print:hover { background: #341a5c; }
+        @media print {
+          .no-print { display: none; }
+          body { margin: 0; }
+          .container { border: none; padding: 0; max-width: 100%; }
+          @page { size: A4; margin: 12mm; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print">
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+      </div>
+
+      <div class="container">
+        <div class="header">
+          <img src="/Imagenes/logo2.png" onerror="this.src='/Imagenes/logo.png'" alt="Go Print">
+          <div class="header-title">
+            <h1>RESUMEN DE CUENTA CORRIENTE</h1>
+            <p>Fecha de emisión: <strong>${fechaEmision}</strong></p>
+          </div>
+        </div>
+
+        <div class="client-box">
+          <div class="client-info">
+            <p style="font-size: 15px; font-weight: bold; color: #5b3693; margin-bottom: 4px;">${nombreCliente}</p>
+            ${contacto ? `<p><strong>Contacto:</strong> ${contacto}</p>` : ''}
+            ${cliente.dni_cuit ? `<p><strong>DNI / CUIT:</strong> ${cliente.dni_cuit}</p>` : ''}
+            ${cliente.phone ? `<p><strong>Teléfono:</strong> ${cliente.phone}</p>` : ''}
+          </div>
+          <div class="saldo-box">
+            <div class="label">${estadoTexto}</div>
+            <div class="amount">${saldoFormateado}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 18%;">FECHA</th>
+              <th style="width: 28%;">CONCEPTO / N° OT</th>
+              <th class="text-right" style="width: 14%;">CARGO</th>
+              <th class="text-center" style="width: 14%;">MÉTODO</th>
+              <th class="text-right" style="width: 13%;">PAGO</th>
+              <th class="text-right" style="width: 13%;">SALDO</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasHTML}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <span>Go Print — Gestión Gráfica</span>
+          <span>Documento informativo de estado de cuenta</span>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+  ventanaPrint.document.close();
 }
