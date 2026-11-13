@@ -132,6 +132,7 @@ function cargarSeccion(seccion) {
   } else if (seccion === 'caja') {
     if (seccionCaja) seccionCaja.style.display = 'block';
     if (typeof cargarCajaHoy === 'function') cargarCajaHoy();
+    if (typeof cargarResumenMensual === 'function') cargarResumenMensual();
   } else if (seccion === 'clientes') {
     if (seccionClientes) seccionClientes.style.display = 'block';
     if (typeof cargarClientes === 'function') cargarClientes();
